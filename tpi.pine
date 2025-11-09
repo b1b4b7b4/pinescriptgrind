@@ -1,0 +1,84 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © biota_mavens_19
+
+//@version=6 
+strategy("tpi builder", initial_capital=1000000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
+import Bikelife76/MajorCobraMetrics2025/2 as cobra
+import TradingView/ta/9 as ta
+
+startFrom = input.time(timestamp("1 Jan 2018"))
+disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+type_table = input.string("Full", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+
+plot(cobra.curve(disp_ind))
+cobra.cobraTable(type_table, pos_table)
+
+getState(l, s)=>
+    if l == close or s == close
+        na
+    else 
+        if l > 0
+            1
+        else if s > 0
+            -1
+        else 
+            0
+
+
+agr = array.new<int>()
+
+filterState1 = getState(input.source(close), input.source(close))
+plot( 1, color = filterState1 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState1)
+
+filterState2 = getState(input.source(close), input.source(close))
+plot(2, color = filterState2 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState2)
+
+filterState3 = getState(input.source(close), input.source(close))
+plot(3, color = filterState3 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState3)
+
+filterState4 = getState(input.source(close), input.source(close))
+plot(4, color = filterState4 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState4)
+
+filterState5 = getState(input.source(close), input.source(close))
+plot(5, color = filterState5 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState5)
+
+
+filterState6 = getState(input.source(close), input.source(close))
+plot(6, color = filterState6 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState6)
+
+filterState7 = getState(input.source(close), input.source(close))
+plot(7, color = filterState7 > 0 ? color.white : color.black, linewidth = 3)
+agr.push(filterState7)
+
+
+agrAvg = agr.avg() 
+
+var tb = table.new(position.top_right, 1, 8)
+for [index, value] in agr
+    if not na(value)
+        tb.cell(0, index, str.tostring(value), bgcolor = value > 0 ? color.green : color.red)
+
+tb.cell(0, 7, str.tostring(agrAvg), text_size = size.large)
+
+
+longTreshhold = input.float(0.2, step=0.05)
+shortTreshhold = input.float(-0.2, step=0.05)
+
+longCond = agrAvg > longTreshhold
+shortCond = agrAvg < shortTreshhold
+
+barcolor(longCond ? color.green : shortCond ? color.red : color.white)
+
+
+if time >= startFrom and barstate.isconfirmed
+    if longCond
+        strategy.entry("x", strategy.long)
+    else if shortCond
+        strategy.entry("y", strategy.short)

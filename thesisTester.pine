@@ -1,0 +1,61 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © biota_mavens_19
+
+//@version=6 
+strategy("strat builder", initial_capital=1000000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
+import Bikelife76/MajorCobraMetrics2025/2 as cobra
+import TradingView/ta/9 as ta
+
+startFrom = input.time(timestamp("1 Jan 2018"))
+disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+type_table = input.string("Full", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+
+plot(cobra.curve(disp_ind))
+cobra.cobraTable(type_table, pos_table)
+
+baseLong = input.source(close) == 1
+baseShort = input.source(close) == 1
+
+// useAndBase2Long =  input.bool(false)
+// useAndBase2Short =  input.bool(false)
+// base2Long = input.source(close) == 1
+// base2Short = input.source(close) == 1
+
+// baseLongCondition = useAndBase2Long ? (baseLong and base2Long) : (baseLong or base2Long)
+// baseShortCondition = useAndBase2Short ? (baseShort and base2Short) : (baseShort or base2Short)
+
+usefilterlong1 = not input.bool(false)
+usefiltershort1 = not input.bool(false)
+filter1Long = input.source(close) == 1 or usefilterlong1
+filter1Short = input.source(close) == 1 or usefiltershort1
+
+usefilterlong2 = not input.bool(false)
+usefiltershort2 = not input.bool(false)
+filter2Long = input.source(close) == 1 or usefilterlong2
+filter2Short = input.source(close) == 1 or usefiltershort2
+
+
+usefilterlong3 = not input.bool(false)
+usefiltershort3 = not input.bool(false)
+filter3Long = input.source(close) == 1 or usefilterlong3
+filter3Short = input.source(close) == 1 or usefiltershort3
+
+usefilterlong4 = not input.bool(false)
+usefiltershort4 = not input.bool(false)
+filter4Long = input.source(close) == 1 or usefilterlong4
+filter4Short = input.source(close) == 1 or usefiltershort4
+
+// filtering leading indicator with confluenses and adding opportunities via volume / atr indicators for big moves if they are not captured
+
+//v2 so the better confluense of base // should give some noise apprpx 100 trades as well and then confluense with different type of filters ()
+longCond = (baseLong and filter1Long) and (filter2Long or filter3Long or filter4Long)
+shortCond = (baseShort and filter1Short) and (filter2Short or filter3Short or filter4Short)
+
+// longCond = baseLong and filter1Long and filter2Long or filter3Long and filter4Long
+// shortCond = baseShort and filter1Short and filter2Short or filter4Short and filter4Short
+if time >= startFrom and barstate.isconfirmed
+    if longCond
+        strategy.entry("x", strategy.long)
+    else if shortCond
+        strategy.entry("y", strategy.short)
