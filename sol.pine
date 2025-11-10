@@ -1,0 +1,166 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © biota_mavens_19
+
+//@version=6 
+strategy("strat builder", initial_capital=1000000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
+import Bikelife76/MajorCobraMetrics2025/2 as cobra
+import TradingView/ta/9 as ta
+
+startFrom = input.time(timestamp("1 Jan 2018"))
+disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+type_table = input.string("Full", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+
+plot(cobra.curve(disp_ind))
+cobra.cobraTable(type_table, pos_table)
+
+getState(l, s)=>
+    if l
+        1
+    else if s
+        -1
+    else 
+        0
+
+
+// {Gunzo} Trend Sniper (close, 41, 5)
+
+// MADB (28, 1.4, close)
+
+// STC (31, 31, 72, 0.5)
+AAAA(BBB, BBBB, BBBBB) =>
+    fastMA = ta.ema(BBB, BBBB)
+    slowMA = ta.ema(BBB, BBBBB)
+    AAAA = fastMA - slowMA
+    AAAA
+
+AAAAA(EEEEEE, BBBB, BBBBB) =>
+    AAA = input.float(0.5, step=0.1)
+    var CCCCC = 0.0
+    var DDD = 0.0
+    var DDDDDD = 0.0
+    var EEEEE = 0.0
+    BBBBBB = AAAA(close, BBBB, BBBBB)
+    CCC = ta.lowest(BBBBBB, EEEEEE)
+    CCCC = ta.highest(BBBBBB, EEEEEE) - CCC
+    CCCCC := CCCC > 0 ? (BBBBBB - CCC) / CCCC * 100 : nz(CCCCC[1])
+    DDD := na(DDD[1]) ? CCCCC : DDD[1] + AAA * (CCCCC - DDD[1])
+    DDDD = ta.lowest(DDD, EEEEEE)
+    DDDDD = ta.highest(DDD, EEEEEE) - DDDD
+    DDDDDD := DDDDD > 0 ? (DDD - DDDD) / DDDDD * 100 : nz(DDDDDD[1])
+    EEEEE := na(EEEEE[1]) ? DDDDDD : EEEEE[1] + AAA * (DDDDDD - EEEEE[1])
+    EEEEE
+
+stc()=>
+    EEEEEE = input(31, 'Length')
+    BBBB = input(31, 'FastLength')
+    BBBBB = input(72, 'SlowLength')
+
+    mAAAAA = AAAAA(EEEEEE, BBBB, BBBBB)
+    [mAAAAA > mAAAAA[1], mAAAAA < mAAAAA[1]]
+
+
+madb()=>
+    length = input.int(title = 'Length', defval = 28, minval = 2)
+    mult = input.float(title = 'Bands Multiplier', defval = 1.4, step = 0.1)
+    src = input(title = 'Source', defval = close)
+
+    basis = ta.sma(src, length)
+    dev = mult * ta.dev(src, length)
+    upper = basis + dev
+    lower = basis - dev
+    [close > upper , close < lower]
+
+
+fn_calculate_wma_with_coefficient(source, length, coefficient) =>
+    // variables
+    candle_weighted_sum = 0.0
+    total_weight = 0.0
+
+    // calculate weigthed sum of candles
+    for i = 0 to length by 1
+        candle_weight = length - i
+        candle_weighted_sum := candle_weighted_sum + (candle_weight - coefficient) * source[i]
+        total_weight := total_weight + candle_weight - coefficient
+        total_weight
+
+    // get the final resulsts 
+    weighted_line = candle_weighted_sum / total_weight
+
+    [weighted_line]
+
+
+
+gunzo()=>
+    float ma_source = input(title = 'MA source', defval = close)
+    int ma_length = input.int(title = 'MA length', defval = 41, minval = 1)
+    bool use_smoothed_line = input(title = 'Use extra smoothing', defval = true)
+    int smoothing_length = input.int(title = 'MA extra smoothing length', defval = 5, minval = 1, maxval = 5)
+    bool change_bar_color = input(title = 'Change candle colors', defval = true)
+
+    coefficient = ma_length / 3.0
+
+    weighted_line_color_up = color.green
+    weighted_line_color_down = color.red
+    candle_bar_color_up = #26A69A
+    candle_bar_color_down = #EF5350
+
+    [weighted_line] = fn_calculate_wma_with_coefficient(ma_source, ma_length, coefficient)
+    weighted_line_smooth = ta.ema(weighted_line, smoothing_length)
+
+    // calculating variables for plotting
+    weighted_line_plotted = use_smoothed_line ? weighted_line_smooth : weighted_line
+    trend_up = weighted_line_plotted > weighted_line_plotted[1]
+    [trend_up, not trend_up]
+
+
+[stcLong, stcShort] = stc()
+[madbLong, madbShort] = madb()
+[gunzoLong, gunzoShort] = gunzo()
+
+baseLong = stcLong
+baseShort = stcShort
+
+usefilterlong1 = not input.bool(true)
+usefiltershort1 = not input.bool(true)
+filter1Long = madbLong or usefilterlong1
+filter1Short = madbShort or usefiltershort1
+
+usefilterlong2 = not input.bool(true)
+usefiltershort2 = not input.bool(true)
+filter2Long = gunzoLong or usefilterlong2
+filter2Short = gunzoShort or usefiltershort2
+
+usefilterlong3 = not input.bool(false)
+usefiltershort3 = not input.bool(false)
+filter3Long = input.source(close) == 1 or usefilterlong3
+filter3Short = input.source(close) == 1 or usefiltershort3
+
+usefilterlong4 = not input.bool(false)
+usefiltershort4 = not input.bool(false)
+filter4Long = input.source(close) == 1 or usefilterlong4
+filter4Short = input.source(close) == 1 or usefiltershort4
+
+// filtering leading indicator with confluenses and adding opportunities via volume / atr indicators for big moves if they are not captured
+//v2 so the better confluense of base // should give some noise apprpx 100 trades as well and then confluense with different type of filters ()
+longCond = (baseLong and filter1Long) and (filter2Long and filter3Long and filter4Long)
+shortCond = (baseShort and filter1Short) and (filter2Short and filter3Short and filter4Short)
+
+
+plot(0, color = getState(baseLong, baseShort) > 0 ? color.white : color.black, linewidth = 3)
+plot(1, color = getState(filter1Long, filter1Short) > 0 ? color.white : color.black, linewidth = 3)
+plot(2, color = getState(filter2Long, filter2Short) > 0 ? color.white : color.black, linewidth = 3)
+plot(3, color = getState(filter3Long, filter3Short) > 0 ? color.white : color.black, linewidth = 3)
+plot(4, color = getState(filter4Long, filter4Short) > 0 ? color.white : color.black, linewidth = 3)
+
+
+barcolor(longCond ? color.green : shortCond ? color.red : color.white)
+
+
+// longCond = baseLong and filter1Long and filter2Long or filter3Long and filter4Long
+// shortCond = baseShort and filter1Short and filter2Short or filter4Short and filter4Short
+if time >= startFrom and barstate.isconfirmed
+    if longCond
+        strategy.entry("x", strategy.long)
+    else if shortCond
+        strategy.entry("y", strategy.short)
