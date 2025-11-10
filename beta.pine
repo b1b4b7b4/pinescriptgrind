@@ -1,0 +1,37 @@
+//@version=5
+indicator(title="Beta Calculator", shorttitle="β calc", overlay=false)
+sym = syminfo.tickerid
+market = input.symbol(title="Reference", defval="BTCUSDT", confirm=false)
+lookback = input.int(title="Lookback candles", defval=400, confirm=false)
+betaLow = input.float(title="treshold", defval=1.30, confirm=false)
+inTime = time == input.time(timestamp("23 Feb 2024 00:00"), title="Start from")
+inLookBack = bar_index == lookback
+
+symPrice = request.security(sym, timeframe.period, close)
+symReturn = (symPrice - symPrice[1]) / symPrice[1]
+symReturnAverage = ta.sma(symReturn, lookback - 1)
+
+marketPrice = request.security(market, timeframe.period, close)
+marketReturn = (marketPrice - marketPrice[1]) / marketPrice[1]
+marketReturnSquared = marketReturn * marketReturn
+marketReturnAverage = ta.sma(marketReturn, lookback - 1)
+
+sRmR = symReturn * marketReturn
+marketReturnVariance = ta.sma(marketReturnSquared, lookback - 1) - marketReturnAverage*marketReturnAverage
+covariance = ta.sma(sRmR, lookback - 1) - marketReturnAverage * symReturnAverage
+
+b = covariance / marketReturnVariance
+var float beta = na
+if inTime
+    beta:=b
+bgcolor(inTime ? color.new(color.red,7) : na, force_overlay = true)
+bgcolor(inLookBack ? color.new(color.white, 7) : na, force_overlay = true)
+
+
+isLow = beta <= betaLow
+tbl = table.new(position.middle_right, 1, 2,force_overlay = true)
+table.cell(tbl, 0, 0, "Beta", bgcolor = #ffffff)
+table.cell(tbl, 0, 1, str.tostring(beta), bgcolor= isLow or na(isLow) ? color.red : #82D9D9)
+
+plot(b)
+plot(betaLow) 
