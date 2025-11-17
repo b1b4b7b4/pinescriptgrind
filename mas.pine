@@ -231,3 +231,64 @@ zlema()=>
 
     zlema = ta.ema(src + src - src[lag], length)
     zlema
+
+
+f_ma(_type) =>
+    _ma = switch _type
+        "alma"  => alma()
+        "arsi"  => arsi()
+        "dema"  => dema()
+        "ema"   => ema()
+        "frama" => frama()
+        "hma"   => hma()
+        "lsma"  => lsma()
+        "lwma"  => lwma()
+        "md"    => md()
+        "rema"  => rema()
+        "rma"   => rma()
+        "sma"   => sma()
+        "smma"  => smma()
+        "tema"  => tema()
+        "tma"   => tma()
+        "tz"    => tz()
+        "VIDYA" => VIDYA()
+        "vwma"  => vwma()
+        "wma"   => wma()
+        "wwma"  => wwma()
+        "zlema" => zlema()
+    _ma
+
+
+ma1 = input.string("sma", "MA #1", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma2 = input.string("ema", "MA #2", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma3 = input.string("hma", "MA #3", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma4 = input.string("wma", "MA #4", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma5 = input.string("dema","MA #5", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma6 = input.string("tema","MA #6", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma7 = input.string("alma","MA #7", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma8 = input.string("rma", "MA #8", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma9 = input.string("sma", "MA #9", options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+ma10= input.string("ema","MA #10",options = ["alma", "arsi", "dema", "ema", "frama", "hma", "lsma", "lwma", "md", "rema", "rma", "sma", "smma", "tema", "tma", "tz", "VIDYA", "vwma", "wma", "wwma", "zlema"])
+
+p1  = f_ma(ma1)
+p2  = f_ma(ma2)
+p3  = f_ma(ma3)
+p4  = f_ma(ma4)
+p5  = f_ma(ma5)
+p6  = f_ma(ma6)
+p7  = f_ma(ma7)
+p8  = f_ma(ma8)
+p9  = f_ma(ma9)
+p10 = f_ma(ma10)
+
+// Plot them with distinct colors
+plot(p1 ,  title = "MA #1",  color = color.new(color.red,    0))
+plot(p2 ,  title = "MA #2",  color = color.new(color.orange, 0))
+plot(p3 ,  title = "MA #3",  color = color.new(color.yellow,0))
+plot(p4 ,  title = "MA #4",  color = color.new(color.lime,  0))
+plot(p5 ,  title = "MA #5",  color = color.new(color.green, 0))
+plot(p6 ,  title = "MA #6",  color = color.new(color.teal,  0))
+plot(p7 ,  title = "MA #7",  color = color.new(color.aqua,  0))
+plot(p8 ,  title = "MA #8",  color = color.new(color.blue,  0))
+plot(p9 ,  title = "MA #9",  color = color.new(color.purple,0))
+plot(p10, title = "MA #10", color = color.new(color.fuchsia,0))
