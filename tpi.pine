@@ -8,53 +8,56 @@ import TradingView/ta/9 as ta
 
 startFrom = input.time(timestamp("1 Jan 2018"))
 disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
-pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓲𝓬𝓼 🐍")
 type_table = input.string("Full", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
 
 plot(cobra.curve(disp_ind))
 cobra.cobraTable(type_table, pos_table)
 
-getState(l, s)=>
-    if l == close or s == close
+getState(s)=>
+    if s == close
         na
     else 
-        if l > 0
-            1
-        else if s > 0
-            -1
-        else 
-            0
+        s
+
+getColor(float s) =>
+    float t = (s + 1.0) / 2.0
+    t := math.max(0.0, math.min(1.0, t))
+    int r = math.round(128 + t * 127)
+    int g = math.round(t * 255)
+    int b = math.round(128 + t * 127)
+    color.rgb(r, g, b, 0)
 
 
-agr = array.new<int>()
+agr = array.new<float>()
 
-filterState1 = getState(input.source(close), input.source(close))
-plot( 1, color = filterState1 > 0 ? color.white : color.black, linewidth = 3)
+filterState1 = getState(input.source(close))
+plot( 1, color = getColor(filterState1), linewidth = 3)
 agr.push(filterState1)
 
-filterState2 = getState(input.source(close), input.source(close))
-plot(2, color = filterState2 > 0 ? color.white : color.black, linewidth = 3)
+filterState2 = getState(input.source(close))
+plot(2, color = getColor(filterState2), linewidth = 3)
 agr.push(filterState2)
 
-filterState3 = getState(input.source(close), input.source(close))
-plot(3, color = filterState3 > 0 ? color.white : color.black, linewidth = 3)
+filterState3 = getState(input.source(close))
+plot(3, color = getColor(filterState3), linewidth = 3)
 agr.push(filterState3)
 
-filterState4 = getState(input.source(close), input.source(close))
-plot(4, color = filterState4 > 0 ? color.white : color.black, linewidth = 3)
+filterState4 = getState(input.source(close))
+plot(4, color = getColor(filterState4), linewidth = 3)
 agr.push(filterState4)
 
-filterState5 = getState(input.source(close), input.source(close))
-plot(5, color = filterState5 > 0 ? color.white : color.black, linewidth = 3)
+filterState5 = getState(input.source(close))
+plot(5, color = getColor(filterState5), linewidth = 3)
 agr.push(filterState5)
 
 
-filterState6 = getState(input.source(close), input.source(close))
-plot(6, color = filterState6 > 0 ? color.white : color.black, linewidth = 3)
+filterState6 = getState(input.source(close))
+plot(6, color = getColor(filterState6), linewidth = 3)
 agr.push(filterState6)
 
-filterState7 = getState(input.source(close), input.source(close))
-plot(7, color = filterState7 > 0 ? color.white : color.black, linewidth = 3)
+filterState7 = getState(input.source(close))
+plot(7, color = getColor(filterState7), linewidth = 3)
 agr.push(filterState7)
 
 
@@ -74,7 +77,7 @@ shortTreshhold = input.float(-0.2, step=0.05)
 longCond = agrAvg > longTreshhold
 shortCond = agrAvg < shortTreshhold
 
-barcolor(longCond ? color.green : shortCond ? color.red : color.white)
+barcolor(getColor(agrAvg))
 
 
 if time >= startFrom and barstate.isconfirmed
