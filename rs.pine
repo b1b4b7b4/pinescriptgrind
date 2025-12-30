@@ -1,0 +1,47 @@
+//@version=6 
+indicator("rs")
+import TradingView/ta/12 as ta
+
+dpo()=>
+    usethis = input.bool(true)
+
+    period_ = input.int(30,"Length",minval = 1)
+    isCentered = input(false,"Centered")
+
+    barsback = period_/2 + 1
+    ma = ta.sma(close, period_)
+    dpo = isCentered ? close[barsback] - ma : close - ma[barsback]
+    dpo > 0 ? 1 : -1
+
+
+scoreLen =input.int(69)
+zscoring() =>
+    mean    = ta.sma(close, scoreLen)
+    stdDev  = ta.stdev(close, scoreLen)
+    zScore  = (close - mean) / stdDev
+    zScore
+
+mean() => 
+    mean    = ta.sma(close, scoreLen)
+    
+[btc] = request.security("INDEX:BTCUSD", "1D", [dpo()])
+[eth] = request.security("INDEX:ETHUSD", "1D", [dpo()])
+[sol] = request.security("CRYPTO:SOLUSD", "1D", [dpo()])
+
+
+[ethbtc, ethbtcSrc, ethBtcMean] = request.security("BINANCE:ETHBTC", "1D", [dpo(), zscoring(), mean()])
+[solbtc, solbtcSrc, solBtcMean] = request.security("BINANCE:SOLBTC", "1D",  [dpo(), zscoring(), mean()])
+[soleth, solethSrc, solEthMean] = request.security("BINANCE:SOLETH", "1D", [dpo(), zscoring(), mean()])
+
+btcCol = btc > 0 ? color.orange : color.black
+ethCol = eth > 0 ? color.blue : color.black
+solCol = sol > 0 ? color.purple : color.black
+
+
+assetAvg = math.avg(ethbtcSrc, solbtcSrc, solethSrc)
+avgMean = ta.sma(assetAvg, scoreLen)
+plot(assetAvg, color = color.white,  linewidth = 5)
+plot(ethbtcSrc, color=ethbtc > 0 ? ethCol : btcCol)
+plot(solbtcSrc, color=solbtc > 0 ? solCol : btcCol)
+plot(solethSrc, color=soleth > 0 ? solCol : ethCol)
+plot(avgMean, color = color.white ,linewidth = 4)
