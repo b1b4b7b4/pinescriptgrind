@@ -1,0 +1,850 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © biota_mavens_19
+
+//@version=6 
+strategy("btc tpi 100", initial_capital=1000000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
+// import Bikelife76/MajorCobraMetrics2025/2 as cobra1
+import affront_aspects-6v/Labuba_MajorCobraMetrics2025/6 as cobra
+import TradingView/ta/9 as ta
+
+startFrom = input.time(timestamp("1 Jan 2018"))
+disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+type_table = input.string("Simple", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+
+plot(cobra.curve(disp_ind))
+cobra.cobraTable(type_table, pos_table)
+
+getState(l, s)=>
+    var int ss = 0
+    if s == close or l == close
+        ss := na
+    else 
+        if l > 0
+            ss := 1
+        else if s > 0
+            ss := -1
+    ss
+
+getColor(float s) =>
+    float t = (s + 1.0) / 2.0
+    t := math.max(0.0, math.min(1.0, t))
+    int r = math.round(128 + t * 127)
+    int g = math.round(t * 255)
+    int b = math.round(128 + t * 127)
+    color.rgb(r, g, b, 0)
+
+
+agr = array.new<float>()
+
+
+// QDT | QB (Strategy, 12, 10, 16, 0.5, 1, 18, 11, 15)
+// DEMA Function
+F_DEMA(SRC, LEN) =>
+    E1 = ta.ema(SRC, LEN)
+    E2 = ta.ema(E1, LEN)
+
+    DEMA = 2 * E1 - E2
+
+    DEMA
+
+// SuperTrend Function
+F_SupTrend(DEMA,len,len_atr,mult_up,mult_dn,SD_Filter) =>
+    lowerATR = ta.percentile_nearest_rank(DEMA,len,25) - ta.atr(len_atr) * mult_up
+    upperATR = ta.percentile_nearest_rank(DEMA,len,75) + ta.atr(len_atr) * mult_dn
+
+    previous_LATR = nz(lowerATR[1])
+    previous_UATR = nz(upperATR[1])
+
+    lowerATR := lowerATR > previous_LATR or close[1] < previous_LATR ? lowerATR : previous_LATR
+    upperATR := upperATR < previous_UATR or close[1] > previous_UATR ? upperATR : previous_UATR
+    int ST_Direction = na
+    float Super_Trend = na
+   
+    if na(SD_Filter[1])
+        ST_Direction := 1
+        ST_Direction
+    else if Super_Trend[1] == previous_UATR
+        ST_Direction := close > upperATR ? -1 : 1
+        ST_Direction
+    else
+        ST_Direction := close < lowerATR ? 1 : -1
+        ST_Direction
+
+    Super_Trend := ST_Direction == -1 ? lowerATR : upperATR
+
+    [Super_Trend, ST_Direction]
+
+
+QTD() =>
+    // DEMA
+    len_dema      = input.int(12,"Dema Length", group = "DEMA")
+    len_perc      = input.int(10, "Percentile Filter", group = "DEMA")
+    filtered_src  = ta.percentile_nearest_rank(close,len_perc , 50)
+
+
+    DEMA_Base = F_DEMA(filtered_src, len_dema)
+
+    //###############################################################################################################################################################################################################################################//
+    // ATR 
+    len_atr = input.int(16, "ATR Length", group = "Volatility")
+    mult_up = input.float(0.5,"Long Multiplier",step = 0.1, group = "Volatility")
+    mult_dn = input.float(1,"Short Multiplier",step = 0.1, group = "Volatility")
+
+    //###############################################################################################################################################################################################################################################//
+    //Final Supertrend 
+    len_demaST = input.int(18,"DEMA Supertrend Length",group = "SuperTrend")
+    len_p      = input.int(11,"Percenteil Filter length",group = "SuperTrend")
+    len_SD     = input.int(15, "SD Length", group = "Standard Deviation")
+
+    DEMA       = F_DEMA(DEMA_Base,len_demaST)
+    SD_Filter  = ta.stdev(filtered_src, len_SD)
+
+    [Super_Trend, ST_Direction] = F_SupTrend(DEMA, len_p,len_atr,mult_up,mult_dn,SD_Filter)
+
+    //###############################################################################################################################################################################################################################################//
+    //Final Signal 
+    Long_C  = ta.crossunder(ST_Direction, 0)
+    Short_C = ta.crossover(ST_Direction, 0)
+
+    var QB = 0
+
+    if Long_C and not Short_C
+        QB := 1
+
+    if Short_C
+        QB := -1
+
+    QB
+
+
+// Robust Scaled Dema | Oquant (close, 16, 41, 1.4, 0)
+ROBUST_SCALED_DEMA()=>
+    src = input.source(close, title = "Source", group = "Source")
+    demalen = input.int(16, "Dema Length", group = "Robust Scaled Dema")
+    rslen = input.int(41, "Robust Scaling Length", group = "Robust Scaled Dema")
+    upperthreshold = input.float(1.4, step = 0.1, title = "Upper Threshold", group = "Thresholds")
+    lowerthreshold = input.float(0, step = 0.1, title = "Lower Threshold", group = "Thresholds")
+
+
+    //dema
+
+    dema = ta.dema(src, demalen)
+
+    //robust scaling
+    q1 = ta.percentile_linear_interpolation(dema, rslen, 25)
+    q3 = ta.percentile_linear_interpolation(dema, rslen, 75)
+    demamedian = ta.percentile_linear_interpolation(dema, rslen, 50)
+
+    iqr = q3 - q1 
+
+    robustscaling = (dema - demamedian)/iqr
+
+
+    //signals
+
+    long = robustscaling > upperthreshold
+    short = robustscaling < lowerthreshold
+
+
+    var oquant = 0
+
+    if long and not short 
+        oquant := 1
+
+    if short 
+        oquant := -1
+
+    oquant
+
+
+
+// VWC (27, ALMA, 0.83, 8, 3, MAD, 23, 1, 0.9, 1.4, 97, Auto (High/Low), 14, 0.2, small)
+basisFrom(srcSeries, basisType,  len, almaOffset, almaSigma, basisSmooth) =>
+    _raw = basisType == "ALMA" ? ta.alma(srcSeries, len, almaOffset, almaSigma) : ta.ema(srcSeries, len)
+    basisSmooth > 1 ? ta.ema(_raw, basisSmooth) : _raw
+
+volFrom(srcSeries, volLen, volMethod, volSmooth) =>
+    _stdev = ta.stdev(srcSeries, volLen)
+    _mad   = ta.sma(math.abs(srcSeries - ta.sma(srcSeries, volLen)), volLen) * 1.4826
+    _vRaw  = volMethod == "StDev" ? _stdev : _mad
+    volSmooth > 1 ? ta.ema(_vRaw, volSmooth) : _vRaw
+
+VWC()=>
+    // ── Inputs
+    grpCore      = "Core"
+    len          = input.int(27, "Basis Length (short-term)", minval=5, group=grpCore)
+    basisType    = input.string("ALMA", "Basis Type", options=["EMA","ALMA"], group=grpCore)
+    almaOffset   = input.float(0.83, "ALMA Offset", minval=0.01, maxval=0.99, step=0.01, group=grpCore, inline="ALMA")
+    almaSigma    = input.float(8, "Sigma", minval=1.0, step=0.5, group=grpCore, inline="ALMA")
+    basisSmooth  = input.int(3, "Basis Smoothing EMA", minval=1, group=grpCore)
+
+    grpVol       = "Volatility & Bands"
+    volMethod    = input.string("MAD", "Volatility", options=["StDev","MAD"], group=grpVol)
+    volLen       = input.int(23, "Vol Length (short-term)", minval=5, group=grpVol)
+    volSmooth    = input.int(1, "Vol Smoothing EMA", minval=1, group=grpVol)
+    minMult      = input.float(0.9, "Min Multiplier", step=0.1, group=grpVol)
+    maxMult      = input.float(1.4, "Max Multiplier", step=0.1, group=grpVol)
+    rankLen      = input.int(97, "Volatility Rank Lookback", minval=20, group=grpVol)
+    showBands    = input.bool(true, "Show Adaptive Bands", group=grpVol)
+
+    // ── Compute the 4-source bases (no raw price plotting)
+    bO = basisFrom(open, basisType,  len, almaOffset, almaSigma, basisSmooth)
+    bH = basisFrom(high, basisType,  len, almaOffset, almaSigma, basisSmooth)
+    bL = basisFrom(low, basisType,  len, almaOffset, almaSigma, basisSmooth)
+    bC = basisFrom(close, basisType,  len, almaOffset, almaSigma, basisSmooth)
+
+    // ── Adaptive volatility based on the same close-basis pipeline
+    v      = volFrom(close, volLen, volMethod, volSmooth)
+    vRank  = ta.percentrank(v, rankLen) / 100.0
+    mult   = minMult + (maxMult - minMult) * vRank
+
+    // Use the close-basis as the “main basis” for bands
+    bMain  = bC
+    upper  = bMain + v * mult
+    lower  = bMain - v * mult
+
+    // ── Signals vs adaptive bands (preserve crossing logic)
+    var s = 0
+    if ta.crossover(close, upper)
+        s:=1
+    if ta.crossunder(close, lower)
+        s:=-1
+
+    s
+
+
+
+// Lsma For Loop | viResearch (2, 5, 70, 48, 22)
+
+system2(a, b, subject) =>
+    total  = 0.0
+    for i  = a to b by 1
+        total += (subject > subject[i] ? 1 : -1)
+        total
+    total
+
+LSMA_FOR_LOOP()=>
+        
+    len        = input.int(2, minval = 2, maxval = 14, group = "Lsma smoothing")
+    subject    = ta.linreg(close, len, 0)
+
+    a          = input.int(5,"from", group = "Lsma For Loop | viResearch")
+    b          = input.int(70,"to", group = "Lsma For Loop | viResearch")
+
+    score = system2(a, b, subject)
+
+    Threshold_L = input.int(48,title = "Threshold uptrend", step = 1, group = "Threshold")
+    Threshold_S = input.int(22,title = "Threshold downtrend" , step = 1, group = "Threshold") 
+
+    L = score > Threshold_L
+    S = score < Threshold_S
+
+    var vii = 0
+
+    if L and not S 
+        vii := 1
+
+    if S 
+        vii := -1
+
+    vii
+
+
+
+// Kernel Channel [BackQuant] (close, 19, 2.1, Laplacian, Kernel StdDev, 1.3, 13, 6)
+// Helper functions
+// Kernel weight function
+kernelWeight(int idx, int length, float bw, string ktype) =>
+    float uRaw = length > 1 ? idx / (length - 1.0) : 0.0
+    float u    = uRaw / bw
+    float w    = 0.0
+
+    if ktype == "Epanechnikov"
+        float uClamp = math.min(1.0, math.max(0.0, u))
+        w := 1.0 - math.pow(uClamp, 2.0)
+    else if ktype == "Triangular"
+        float uClamp = math.min(1.0, math.max(0.0, u))
+        w := 1.0 - uClamp
+    else if ktype == "Laplacian"
+        w := math.exp(-math.abs(u))
+    else
+        float uClamp = math.min(1.0, math.max(0.0, u))
+        w := 0.5 * (1.0 + math.cos(math.pi * uClamp))
+
+    w
+
+// Kernel mean
+kernelMu(series float s, int length, float bw, string ktype) =>
+    float num = 0.0
+    float den = 0.0
+    for i = 0 to length - 1
+        float w = kernelWeight(i, length, bw, ktype)
+        float v = nz(s[i])
+        num += w * v
+        den += w
+    den != 0.0 ? num / den : na
+
+// Kernel standard deviation around given mean
+kernelStddev(series float s, int length, float bw, string ktype, float mean) =>
+    float num = 0.0
+    float den = 0.0
+    for i = 0 to length - 1
+        float w = kernelWeight(i, length, bw, ktype)
+        float diff = nz(s[i]) - mean
+        num += w * diff * diff
+        den += w
+    den != 0.0 ? math.sqrt(num / den) : na
+
+
+// Percentile based squeeze threshold
+percentile(series float s, int len, float pct) =>
+    // rolling approximation using rank in window
+    float threshold = na
+    if bar_index >= len
+        int count = 0
+        int rank  = 0
+        for i = 0 to len - 1
+            float v = nz(s[i])
+            if not na(v)
+                count += 1
+                if v < nz(s[0])
+                    rank += 1
+        // If current value is in lowest pct percent of the window
+        frac = count > 0 ? 100.0 * rank / count : na
+        threshold := frac
+    threshold
+
+KERNEL_CHANNEL()=>
+    // Input groups
+    const string gKernel = "Kernel Settings"
+    const string gBand   = "Channel Width"
+    const string gVisual = "Visuals"
+    // Kernel settings
+    src                  = input.source(close, "Source", group = gKernel)
+    winLength            = input.int(19, "Window Length", minval = 2, group = gKernel)
+    bandwidth            = input.float(2.1, "Bandwidth (locality)", minval = 0.1, step = 0.1, group = gKernel)
+    kernelType           = input.string("Laplacian", "Kernel Type", options = ["Epanechnikov", "Triangular", "Laplacian", "Cosine"], group = gKernel)
+
+    // Channel width settings
+    bandType             = input.string("Kernel StdDev", "Band Type", options = ["Kernel ATR", "Kernel StdDev"], group = gBand)
+    bandMult             = input.float(1.3, "Band Multiplier", minval = 0.0, step = 0.1, group = gBand)
+
+    // Visual settings
+    bool showBands       = input.bool(true, "Show Bands", group = gVisual, tooltip = "This is the plotting of the Band Type, ATR or StdDev")
+    bool useBarColor     = input.bool(false, "Color Bars By Regime", group = gVisual)
+    bool showSqueeze     = input.bool(true, "Highlight Squeeze Periods", group = gVisual)
+    bool highlightDev    = input.bool(false, "Highlight Price Devation from Channel", group = gVisual, tooltip = "Only use this when Band Type is set to Kernal StdDev, using this on ATR mode will not have any signal capacity.")
+    int squeezeLookback  = input.int(13, "Squeeze Lookback", group = gVisual)
+    float squeezePct     = input.float(6, "Squeeze Percentile", minval = 1.0, step = 1.0, group = gVisual)
+    color colUp          = input.color(#00ff00, "Long Color", group=gVisual, inline="col", tooltip="Line/ channel color when slope is up")
+    color colDown        = input.color(#ff0000, "Short Color", group=gVisual, inline="col", tooltip="Line/ channel color when slope is down")
+    color sqzCol         = input.color(#ffeb3b26, "Squeeze Color", group = gVisual, inline="col")
+    color colFlat        = color.gray
+
+    // Core calculations
+    midline = kernelMu(src, winLength, bandwidth, kernelType)
+
+    // Width from ATR or StdDev
+    trSeries = ta.tr(true)
+    widthAtr = kernelMu(trSeries, winLength, bandwidth, kernelType)
+    widthStd = na(midline) ? na : kernelStddev(src, winLength, bandwidth, kernelType, midline)
+    width    = bandType == "Kernel ATR" ? widthAtr : widthStd
+
+    upper = na(midline) or na(width) ? na : midline + width * bandMult
+    lower = na(midline) or na(width) ? na : midline - width * bandMult
+
+    // Colors and regimes
+    midColor = midline > midline[1] ? colUp : midline < midline[1] ? colDown : colFlat
+
+    // Relative width for squeeze logic
+    relWidth = na(width) or midline == 0.0 ? na : width / math.abs(midline)
+
+  
+    squeezeRank = showSqueeze and not na(relWidth) ? percentile(relWidth, squeezeLookback, squeezePct) : na
+    inSqueeze   = showSqueeze and not na(squeezeRank) and squeezeRank <= squeezePct
+
+    var float s = 0
+    // Bar coloring
+    bool trendUpStrong   = close > upper and midline > midline[1]
+    bool trendDownStrong = close < lower and midline < midline[1]
+    bool trendUpWeak     = close >= midline and close <= upper and midline > midline[1]
+    bool trendDownWeak   = close <= midline and close >= lower and midline < midline[1]
+    bool compressed      = showSqueeze and inSqueeze
+
+    if trendUpStrong
+        s:=1
+    else if trendDownStrong
+        s:=-1
+    else if trendUpWeak
+        s:=0.5
+    else if trendDownWeak
+        s:=-0.5
+  
+    s
+
+// Adaptive Gaussian Channels (26, 2.5, close, MA:EMA, 35, Upper&Lower, Standard Deviation, 12, 1.45)
+// === Gaussian Filter ===
+gaussianFilter(src, len, sigma) =>
+    totalWeight = 0.0
+    weightedSum = 0.0
+    for i = 0 to len - 1
+        weight = math.exp(-0.5 * math.pow((i - (len - 1) / 2) / sigma, 2))
+        totalWeight += weight
+        weightedSum += src[i] * weight
+    weightedSum / totalWeight
+
+
+
+
+// Corrective MA | from: gotbeatz26107/ma_/5 (library)
+f_cma(float src, simple int length) =>
+    ma     = ta.sma(src, length)
+    v1      = ta.variance(src, length)
+    v2      = math.pow(nz(ma[1], ma) - ma, 2)
+    v3      = v1 == 0 or v2 == 0 ? 1 : v2 / (v1 + v2)
+        
+    var tolerance = math.pow(10, -5)
+    float err   = 1
+        
+    // Gain Factor
+    float kPrev = 1
+    float k     = 1
+        
+    for i = 0 to 5000 by 1
+        if err > tolerance
+            k := v3 * kPrev * (2 - kPrev)
+            err := kPrev - k
+            kPrev := k
+            kPrev             
+    ma      := nz(ma[1], src) + k * (ma - nz(ma[1], src))
+
+// Fisher Least Squares MA | from: gotbeatz26107/ma_/5 (library)
+f_flsma(float src, simple int len) =>
+    ma = src
+    e = ta.sma(math.abs(src - nz(ma[1])), len)
+    z = ta.sma(src - nz(ma[1], src), len) / e
+    r = (math.exp(2 * z) - 1) / (math.exp(2 * z) + 1)
+    a = (bar_index - ta.sma(bar_index, len)) / ta.stdev(bar_index, len) * r
+    ma := ta.sma(src, len) + a * ta.stdev(src, len)
+
+// Function to calculate the Sine-Weighted Moving Average
+f_swma(series float src, simple int length) =>
+    var float[] sine_weights = array.new_float(0)
+    array.clear(sine_weights)  // Clear the array before recalculating weights
+    for i = 0 to length - 1
+        weight = math.sin((math.pi * (i + 1)) / length)
+        array.push(sine_weights, weight)
+
+    // Normalize the weights
+    sum_weights = array.sum(sine_weights)
+    for i = 0 to length - 1
+        norm_weight = array.get(sine_weights, i) / sum_weights
+        array.set(sine_weights, i, norm_weight)
+
+    // Calculate Sine-Weighted Moving Average
+    swma = 0.0
+    if bar_index >= length
+        for i = 0 to length - 1
+            swma := swma + array.get(sine_weights, i) * src[i]
+    swma
+
+// Function to calculate the Cosine-Weighted Moving Average with shifted weights
+f_cwma(series float src, simple int length) =>
+    var float[] cosine_weights = array.new_float(0)
+    array.clear(cosine_weights)  // Clear the array before recalculating weights
+    for i = 0 to length - 1
+        weight = math.cos((math.pi * (i + 1)) / length) + 1  // Shift by adding 1
+        array.push(cosine_weights, weight)
+
+    // Normalize the weights
+    sum_weights = array.sum(cosine_weights)
+    for i = 0 to length - 1
+        norm_weight = array.get(cosine_weights, i) / sum_weights
+        array.set(cosine_weights, i, norm_weight)
+
+    // Calculate Cosine-Weighted Moving Average
+    cwma = 0.0
+    if bar_index >= length
+        for i = 0 to length - 1
+            cwma := cwma + array.get(cosine_weights, i) * src[i]
+    cwma
+//}
+
+get_ma(type, src, len) =>
+    float result = na
+    switch type
+        'SMA' => result := ta.sma(src, len)
+        'EMA' => result := ta.ema(src, len)
+        'VWMA' => result := ta.vwma(src, len)
+        'WMA' => result := ta.wma(src, len)
+        'HMA' => result := ta.hma(src, len)
+        'RMA' => result := ta.rma(src, len)
+        'TEMA' => result := ta.tema(src, len)
+        'DEMA' => result := ta.dema(src, len)
+        'FRAMA' => result := ta.frama(src, len)
+        'TRIMA' => result := ta.trima(src, len)
+        "Corrective"             =>  result := f_cma(src, len)
+        "Fisher Least Squares"   =>  result := f_flsma(src, len)
+        "Sine-Weighted"          =>  result := f_swma(src, len)
+        "Cosine-Weighted"        =>  result := f_cwma(src, len)
+        => result := ta.sma(src, len)
+    result
+
+
+//#region Deviation Calculation Functions
+calcStdev(src, period) =>
+    ta.stdev(src, period)
+
+calcMAD(src, period) =>
+    mean = ta.sma(src, period)
+    ta.sma(math.abs(src - mean), period)
+
+calcMedAD(src, period) =>
+    float[] deviations = array.new_float()
+    for i = 0 to period - 1
+        array.push(deviations, math.abs(src[i] - ta.median(src, period)))
+    deviations.median()
+
+calcExpDev(src, period) =>
+    ema = ta.ema(src, period)
+    ta.ema(math.abs(src - ema), period)
+
+
+calcHullDev(src, period) =>
+    hma = ta.hma(src, period)
+    math.abs(src - hma)
+
+calcFramaDev(src, period) =>
+    frama = ta.frama(src, period)
+    math.abs(src - frama)
+
+calcKaufmanDev(src, period) =>
+    change = math.abs(src - src[period])
+    volatility = 0.0
+    for i = 0 to period - 1
+        volatility += math.abs(src[i] - src[i + 1])
+    er = volatility == 0 ? 0 : change / volatility
+    fastSC = 2.0 / (2 + 1)
+    slowSC = 2.0 / (30 + 1)
+    sc = math.pow(er * (fastSC - slowSC) + slowSC, 2)
+    emaSrc = ta.ema(src, period)
+    dev = math.abs(src - emaSrc)
+    var float kamaDev = na
+    kamaDev := na(kamaDev) ? dev : kamaDev + sc * (dev - kamaDev)
+    kamaDev
+
+calcGaussianDev(src, period) =>
+    weights = array.new_float()
+    sumw    = 0.0
+    for i = 0 to period - 1
+        w = math.exp(-math.pow((i / period) / 2,2))
+        array.push(weights, w)
+        sumw += w
+
+    wmean = 0.0
+    for i = 0 to period - 1
+        wmean += src[i] * array.get(weights, i)
+    wmean := wmean / sumw
+
+    wvar = 0.0
+    for i = 0 to period - 1
+        diff = src[i] - wmean
+        wvar += math.pow(diff,2) * array.get(weights, i)
+    math.sqrt(wvar / sumw)
+
+calcQuantileDev(src, period) =>
+    float[] values = array.new_float()
+    for i = 0 to period - 1
+        array.push(values, src[i])
+    array.sort(values)
+    q90 = array.get(values, math.round(period * 0.75))
+    q10 = array.get(values, math.round(period * 0.25))
+    q90 - q10
+
+calcLinRegDev(src, period) =>
+    linreg_val = ta.linreg(src, period, 0)
+    math.abs(src - linreg_val)
+// Main Deviation Calculation
+getDeviation(src, period, devType) =>
+    switch devType
+        "Standard Deviation"        => calcStdev(src, period)
+        "Mean Absolute Deviation"   => calcMAD(src, period)
+        "Median Absolute Deviation" => calcMedAD(src, period)
+        "Exponential Deviation"     => calcExpDev(src, period)
+        "Average True Range"        => ta.atr(period)
+        "Linear Regression Deviation" => calcLinRegDev(src, period)
+        "Hull Deviation"            => calcHullDev(src, period)
+        "Frama Deviation"            => calcFramaDev(src, period)
+        "Kauffman Adaptive Deviation"=> calcKaufmanDev(src, period)
+        "Gaussian Deviation"        => calcGaussianDev(src, period)
+        "Quantile Deviation"        => calcQuantileDev(src, period)
+        => calcStdev(src, period)
+
+//#endregion
+// Credits: The Kernel Regression were taken from ChartPrime.
+// The original script: https://www.tradingview.com/script/o4YRa7e8-Multi-Kernel-Regression-ChartPrime/
+//#region Kernel Regression Functions
+sq(source) => math.pow(source, 2)
+
+gaussian(source, bandwidth) => 
+    math.exp(-sq(source / bandwidth) / 2) / math.sqrt(2 * math.pi) 
+
+triangular(source, bandwidth) =>
+    math.abs(source/bandwidth) <= 1 ? 1 - math.abs(source/bandwidth) : 0.0
+
+epanechnikov(source, bandwidth) =>
+    math.abs(source/bandwidth) <= 1 ? (3/4.) * (1 - sq(source/bandwidth)) : 0.0
+
+quartic(source, bandwidth) =>
+    if math.abs(source/bandwidth) <= 1 
+        15/16. * math.pow(1 - sq(source/bandwidth), 2)
+    else
+        0.0
+
+logistic(source, bandwidth) =>
+    1 / (math.exp(source / bandwidth) + 2 + math.exp(-source / bandwidth))
+
+cosine(source, bandwidth) =>
+    math.abs(source/bandwidth) <= 1 ? (math.pi / 4) * math.cos((math.pi / 2) * (source/bandwidth)) : 0.0
+
+laplace(source, bandwidth) =>
+    (1 / (2 * bandwidth)) * math.exp(-math.abs(source/bandwidth))
+
+exponential(source, bandwidth) =>
+    (1 / bandwidth) * math.exp(-math.abs(source/bandwidth))
+
+
+silverman(source, bandwidth) =>
+    if math.abs(source/bandwidth) <= 0.5 
+        0.5 * math.exp(-(source/bandwidth)/2) * math.sin((source/bandwidth)/2 + math.pi/4) 
+    else 
+        0.0 
+
+tent(source, bandwidth) =>
+    if math.abs(source/bandwidth) <= 1
+        1 - math.abs(source/bandwidth)
+    else
+        0.0
+
+cauchy(source, bandwidth) =>
+    1 / (math.pi * bandwidth * (1 + sq(source / bandwidth)))
+
+sinc(source, bandwidth) =>
+    if source == 0
+        1
+    else
+        math.sin(math.pi * source / bandwidth) / (math.pi * source / bandwidth)
+
+wave(source, bandwidth) =>
+    if (math.abs(source/bandwidth) <= 1)
+        (1 - math.abs(source/bandwidth)) * math.cos((math.pi * source) / bandwidth)
+    else
+        0.0
+
+parabolic(source, bandwidth) =>
+    if math.abs(source/bandwidth) <= 1
+        1 - math.pow((source/bandwidth), 2)
+    else
+        0.0
+
+power(source, bandwidth) =>
+    if (math.abs(source/bandwidth) <= 1)
+        math.pow(1 - math.pow(math.abs(source/bandwidth), 3), 3)
+    else
+        0.0
+
+loglogistic(source, bandwidth) =>
+    1 / math.pow(1 + math.abs(source / bandwidth), 2)
+
+morters(source, bandwidth) =>
+    if math.abs(source / bandwidth) <= math.pi
+        (1 + math.cos(source / bandwidth)) / (2 * math.pi * bandwidth)
+    else
+        0.0
+
+kernel(source, bandwidth, style)=>
+    switch style
+        "Triangular"    => triangular(source, bandwidth)
+        "Gaussian"      => gaussian(source, bandwidth)
+        "Epanechnikov"  => epanechnikov(source, bandwidth)
+        "Logistic"      => logistic(source, bandwidth)
+        "Log Logistic"  => loglogistic(source, bandwidth)
+        "Cosine"        => cosine(source, bandwidth)
+        "Sinc"          => sinc(source, bandwidth)
+        "Laplace"       => laplace(source, bandwidth)
+        "Quartic"       => quartic(source, bandwidth)
+        "Parabolic"     => parabolic(source, bandwidth)
+        "Exponential"   => exponential(source, bandwidth)
+        "Silverman"     => silverman(source, bandwidth)
+        "Cauchy"        => cauchy(source, bandwidth)
+        "Tent"          => tent(source, bandwidth)
+        "Wave"          => wave(source, bandwidth)
+        "Power"         => power(source, bandwidth)
+        "Morters"       => morters(source, bandwidth)
+
+//#endregion
+
+precalculate_kernel(bandwidth, kernel)=>
+    var float[] weights = array.new<float>()
+    var float sumw = 0
+    if barstate.isfirst
+        for i = 0 to bandwidth - 1
+            j = math.pow(i, 2) / (math.pow(bandwidth, 2))
+            weight = kernel(j, 1, kernel)
+            weights.push(weight)
+            sumw += weight
+        [weights, sumw]
+    else
+        [weights, sumw]
+
+
+multi_kernel_regression(source, bandwidth,kernel_type)=>
+
+    float kernel_regression = na
+
+    [weights, sumw] = precalculate_kernel(bandwidth, kernel_type)
+    float sum   = 0.0
+    for i = 0 to bandwidth - 1
+        weight = weights.get(i)
+        sum += nz(source[i]) * weight
+    kernel_regression := sum / sumw
+    
+    [kernel_regression]
+
+
+
+// Adaptive Gaussian Channels (26, 2.5, close, MA:EMA, 35, Upper&Lower, Standard Deviation, 12, 1.45)
+
+ADAPTIVE_GAUSSIAN_CHANNELS()=>
+    lenGaussian = input.int(26, 'Gaussian Length', group = 'Gaussian Filter')
+    sigma       = input.float(2.5, 'Gaussian Sigma', group = 'Gaussian Filter',step=0.1)
+    src         = input(close, 'Source', group = 'Gaussian Filter')
+    // Dropdown
+    selectedType = input.string(title = "Select Calculation",defval = "MA:EMA",
+        options = ["MA:SMA", "MA:EMA", "MA:VWMA", "MA:WMA", "MA:HMA", "MA:RMA", "MA:TEMA", "MA:DEMA", "MA:FRAMA", "MA:TRIMA",
+        "MA:Corrective","MA:Fisher Least Squares", "MA:Sine-Weighted","MA:Cosine-Weighted",
+        "KR:Triangular", "KR:Gaussian", "KR:Epanechnikov", "KR:Logistic", "KR:Log Logistic", "KR:Cosine",
+        "KR:Sinc", "KR:Laplace", "KR:Quartic", "KR:Parabolic", "KR:Exponential", "KR:Silverman",
+        "KR:Cauchy", "KR:Tent", "KR:Wave", "KR:Power", "KR:Morters"],
+        group = "Main Line")
+
+    mainLineLen = input.int(35, 'Main Line Length', group = 'Main Line')
+
+    atrMultOption = input.string("Upper&Lower","Apply multiplier on:", options = ["Upper&Lower","Upper","Lower","None"], group = 'Deviation Bands',tooltip = "Apply Deviation Multiplier on Upper and/or Lower bands, or None")
+
+    devType = input.string("Standard Deviation", "Deviation Type", 
+    [ "Standard Deviation" 
+    , "Mean Absolute Deviation"
+    , "Median Absolute Deviation"
+    , "Exponential Deviation"
+    , "Average True Range"
+    , "Linear Regression Deviation"
+    , "Hull Deviation"
+    , "Frama Deviation"
+    , "Kauffman Adaptive Deviation"
+    , "Gaussian Deviation"
+    , "Quantile Deviation"],group="Deviation Bands")
+
+    dev_lookback = input.int(12,"Deviation Lookback",group="Deviation Bands")
+    multiplier = input.float(1.45, "Deviation Multiplier",group="Deviation Bands", minval=0.1, step=0.05)
+
+    // Calculations Start Here
+    filteredSrc = gaussianFilter(src, lenGaussian, sigma)
+
+    var float mainLine = na
+
+    if str.startswith(selectedType, "MA:")
+        // strip off the "MA:" and feed into get_ma
+        maName = str.substring(selectedType, 3)  // e.g. "EMA"
+        mainLine := get_ma(maName, filteredSrc, mainLineLen)
+    else
+        krName = str.substring(selectedType, 3)  // e.g. "Gaussian"
+        [krValue] = multi_kernel_regression(filteredSrc, mainLineLen, krName)
+        mainLine := krValue
+
+
+
+    deviation = getDeviation(mainLine,dev_lookback,devType)
+
+    upperDeviation = switch atrMultOption
+        "Upper&Lower" => deviation * multiplier
+        "Upper"       => deviation * multiplier
+        "Lower"       => deviation
+        "None"        => deviation
+
+    lowerDeviation = switch atrMultOption
+        "Upper&Lower" => deviation * multiplier
+        "Upper"       => deviation
+        "Lower"       => deviation * multiplier
+        "None"        => deviation
+
+    upperChannel = mainLine + upperDeviation
+    lowerChannel = mainLine - lowerDeviation
+
+    var trend = 0
+    if barstate.isconfirmed
+        trend := close > upperChannel ? 1 : close < lowerChannel ? -1 : nz(trend[1], 0)
+
+    trend
+
+
+filterState1 = QTD()
+plot( 1, color = getColor(filterState1), linewidth = 3)
+agr.push(filterState1)
+
+filterState2 = ROBUST_SCALED_DEMA()
+plot( 2, color = getColor(filterState2), linewidth = 3)
+agr.push(filterState2)
+
+filterState3 = VWC()
+plot( 3, color = getColor(filterState3), linewidth = 3)
+agr.push(filterState3)
+
+filterState4 = LSMA_FOR_LOOP()
+plot( 4, color = getColor(filterState4), linewidth = 3)
+agr.push(filterState4)
+
+
+filterState5 = KERNEL_CHANNEL()
+plot( 5, color = getColor(filterState5), linewidth = 3)
+agr.push(filterState5)
+
+
+filterState6 = ADAPTIVE_GAUSSIAN_CHANNELS()
+plot( 6, color = getColor(filterState6), linewidth = 3)
+agr.push(filterState6)
+
+
+// filterState7 = IDAHL()
+// plot( 7, color = getColor(filterState7), linewidth = 3)
+// agr.push(filterState7)
+
+
+
+
+agrAvg = agr.avg() 
+
+var tb = table.new(position.top_right, 1, 8)
+for [index, value] in agr
+    if not na(value)
+        tb.cell(0, index, str.tostring(value), bgcolor = value > 0 ? color.green : color.red)
+
+tb.cell(0, 7, str.tostring(agrAvg), text_size = size.large)
+
+
+longTreshhold = input.float(0.2, step=0.05)
+shortTreshhold = input.float(-0.2, step=0.05)
+
+longCond = agrAvg > longTreshhold
+shortCond = agrAvg < shortTreshhold
+
+barcolor(getColor(agrAvg))
+
+
+if time >= startFrom and barstate.isconfirmed
+    if longCond
+        strategy.entry("x", strategy.long)
+    else if shortCond
+        strategy.entry("y", strategy.short)
+
