@@ -1,3 +1,5 @@
+// © biota_mavens_19
+
 //@version=6 
 indicator("rs")
 import TradingView/ta/12 as ta
@@ -14,7 +16,7 @@ dpo()=>
     dpo > 0 ? 1 : -1
 
 
-scoreLen =input.int(69)
+scoreLen =input.int(59)
 zscoring() =>
     mean    = ta.sma(close, scoreLen)
     stdDev  = ta.stdev(close, scoreLen)
@@ -24,24 +26,29 @@ zscoring() =>
 mean() => 
     mean    = ta.sma(close, scoreLen)
     
-[btc] = request.security("INDEX:BTCUSD", "1D", [dpo()])
-[eth] = request.security("INDEX:ETHUSD", "1D", [dpo()])
-[sol] = request.security("CRYPTO:SOLUSD", "1D", [dpo()])
+[btc] = request.security(input.symbol("INDEX:BTCUSD"), "1D", [dpo()])
+[eth] = request.security(input.symbol("INDEX:ETHUSD"), "1D", [dpo()])
+[sol] = request.security(input.symbol("CRYPTO:SOLUSD"), "1D", [dpo()])
 
 
-[ethbtc, ethbtcSrc, ethBtcMean] = request.security("BINANCE:ETHBTC", "1D", [dpo(), zscoring(), mean()])
-[solbtc, solbtcSrc, solBtcMean] = request.security("BINANCE:SOLBTC", "1D",  [dpo(), zscoring(), mean()])
-[soleth, solethSrc, solEthMean] = request.security("BINANCE:SOLETH", "1D", [dpo(), zscoring(), mean()])
+[ethbtc, ethbtcSrc, ethBtcMean] = request.security(input.symbol("BINANCE:ETHBTC"), "1D", [dpo(), zscoring(), mean()])
+[solbtc, solbtcSrc, solBtcMean] = request.security(input.symbol("BINANCE:SOLBTC"), "1D",  [dpo(), zscoring(), mean()])
+[soleth, solethSrc, solEthMean] = request.security(input.symbol("BINANCE:SOLETH"), "1D", [dpo(), zscoring(), mean()])
 
 btcCol = btc > 0 ? color.orange : color.black
 ethCol = eth > 0 ? color.blue : color.black
 solCol = sol > 0 ? color.purple : color.black
 
 
+emaLen = input.int(48)
 assetAvg = math.avg(ethbtcSrc, solbtcSrc, solethSrc)
-avgMean = ta.sma(assetAvg, scoreLen)
-plot(assetAvg, color = color.white,  linewidth = 5)
-plot(ethbtcSrc, color=ethbtc > 0 ? ethCol : btcCol)
-plot(solbtcSrc, color=solbtc > 0 ? solCol : btcCol)
-plot(solethSrc, color=soleth > 0 ? solCol : ethCol)
-plot(avgMean, color = color.white ,linewidth = 4)
+avgMean = ta.ema(assetAvg, emaLen)
+plot(assetAvg, color = color.white,  linewidth = 1)
+plot(ethbtcSrc, color=ethbtc > 0 ? ethCol : btcCol, linewidth = 4)
+plot(solbtcSrc, color=solbtc > 0 ? solCol : btcCol, linewidth = 4)
+plot(solethSrc, color=soleth > 0 ? solCol : ethCol, linewidth = 4)
+plot(avgMean, color = color.white ,linewidth = 1)
+
+
+plot(assetAvg > avgMean ? 1 : -1, display = display.none)
+plot(assetAvg < avgMean ? 1 : -1, display = display.none)
