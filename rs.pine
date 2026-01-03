@@ -26,6 +26,10 @@ zscoring() =>
 mean() => 
     mean    = ta.sma(close, scoreLen)
     
+btcscore = 0
+ethscore = 0
+solscore = 0
+
 [btc] = request.security(input.symbol("INDEX:BTCUSD"), "1D", [dpo()])
 [eth] = request.security(input.symbol("INDEX:ETHUSD"), "1D", [dpo()])
 [sol] = request.security(input.symbol("CRYPTO:SOLUSD"), "1D", [dpo()])
@@ -40,15 +44,29 @@ ethCol = eth > 0 ? color.blue : color.black
 solCol = sol > 0 ? color.purple : color.black
 
 
-emaLen = input.int(48)
-assetAvg = math.avg(ethbtcSrc, solbtcSrc, solethSrc)
-avgMean = ta.ema(assetAvg, emaLen)
-plot(assetAvg, color = color.white,  linewidth = 1)
+btcscore :=  (ethbtc / -1) + (solbtc/-1)
+ethscore :=  ethbtc + (soleth/-1)
+solscore :=  solbtc + soleth
+
+var t = table.new(position.top_right, 2, 3)
+t.cell(0, 0, "ticker 1")
+t.cell(1, 0, str.tostring(btcscore), bgcolor = btcCol)
+
+t.cell(0, 1, "ticker 2")
+t.cell(1, 1, str.tostring(ethscore), bgcolor = ethCol)
+
+t.cell(0, 2, "ticker 3")
+t.cell(1, 2, str.tostring(solscore), bgcolor = solCol)
+
+// emaLen = input.int(48)
+// assetAvg = math.avg(ethbtcSrc, solbtcSrc, solethSrc)
+// avgMean = ta.ema(assetAvg, emaLen)
+// plot(assetAvg, color = color.white,  linewidth = 1)
 plot(ethbtcSrc, color=ethbtc > 0 ? ethCol : btcCol, linewidth = 4)
 plot(solbtcSrc, color=solbtc > 0 ? solCol : btcCol, linewidth = 4)
 plot(solethSrc, color=soleth > 0 ? solCol : ethCol, linewidth = 4)
-plot(avgMean, color = color.white ,linewidth = 1)
+// plot(avgMean, color = color.white ,linewidth = 1)
 
 
-plot(assetAvg > avgMean ? 1 : -1, display = display.none)
-plot(assetAvg < avgMean ? 1 : -1, display = display.none)
+// plot(assetAvg > avgMean ? 1 : -1, display = display.none)
+// plot(assetAvg < avgMean ? 1 : -1, display = display.none)
