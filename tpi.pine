@@ -2,23 +2,30 @@
 // © biota_mavens_19
 
 //@version=6 
-strategy("tpi builder", initial_capital=1000000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
-import Bikelife76/MajorCobraMetrics2025/2 as cobra
+strategy("tpi builder", initial_capital=10000, slippage=1, default_qty_value=100, pyramiding=0, margin_long = 0, margin_short = 0, default_qty_type=strategy.percent_of_equity, process_orders_on_close=true, overlay=false)
+// import Bikelife76/MajorCobraMetrics2025/2 as cobra
+import affront_aspects-6v/Labuba_MajorCobraMetrics2025/6 as cobra
+
 import TradingView/ta/9 as ta
 
 startFrom = input.time(timestamp("1 Jan 2018"))
 disp_ind = input.string ("Equity" , title = "Display Curve" , tooltip = "Choose which data you would like to display", options=["Strategy", "Equity", "Open Profit", "Gross Profit", "Net Profit", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
-pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓲𝓬𝓼 🐍")
-type_table = input.string("Full", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
+pos_table = input.string("Bottom Left", "Table Position", options = ["Top Left", "Middle Left", "Bottom Left", "Top Right", "Middle Right", "Bottom Right", "Top Center", "Bottom Center"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓻𝓲𝓬𝓼 🐍")
+type_table = input.string("Simple", "Table Type", options = ["Full", "Simple", "None"], group = "🐍 𝓒𝓸𝓫𝓻𝓪 𝓜𝓮𝓽𝓻𝓲𝓬𝓼 🐍")
 
 plot(cobra.curve(disp_ind))
 cobra.cobraTable(type_table, pos_table)
 
-getState(s)=>
-    if s == close
-        na
+getState(l, s)=>
+    var int ss = 0
+    if s == close or l == close
+        ss := na
     else 
-        s
+        if l > 0
+            ss := 1
+        else if s > 0
+            ss := -1
+    ss
 
 getColor(float s) =>
     float t = (s + 1.0) / 2.0
@@ -31,44 +38,55 @@ getColor(float s) =>
 
 agr = array.new<float>()
 
-filterState1 = getState(input.source(close))
+filterState1 = getState(input.source(close), input.source(close))
 plot( 1, color = getColor(filterState1), linewidth = 3)
 agr.push(filterState1)
 
-filterState2 = getState(input.source(close))
+filterState2 = getState(input.source(close), input.source(close))
 plot(2, color = getColor(filterState2), linewidth = 3)
 agr.push(filterState2)
 
-filterState3 = getState(input.source(close))
+filterState3 = getState(input.source(close), input.source(close))
 plot(3, color = getColor(filterState3), linewidth = 3)
 agr.push(filterState3)
 
-filterState4 = getState(input.source(close))
+filterState4 = getState(input.source(close), input.source(close))
 plot(4, color = getColor(filterState4), linewidth = 3)
 agr.push(filterState4)
 
-filterState5 = getState(input.source(close))
+filterState5 = getState(input.source(close), input.source(close))
 plot(5, color = getColor(filterState5), linewidth = 3)
 agr.push(filterState5)
 
 
-filterState6 = getState(input.source(close))
+filterState6 = getState(input.source(close), input.source(close))
 plot(6, color = getColor(filterState6), linewidth = 3)
 agr.push(filterState6)
 
-filterState7 = getState(input.source(close))
+filterState7 = getState(input.source(close), input.source(close))
 plot(7, color = getColor(filterState7), linewidth = 3)
 agr.push(filterState7)
 
+filterState8 = getState(input.source(close), input.source(close))
+plot(8, color = getColor(filterState8), linewidth = 3)
+agr.push(filterState8)
+
+filterState9 = getState(input.source(close), input.source(close))
+plot(9, color = getColor(filterState9), linewidth = 3)
+agr.push(filterState9)
+
+filterState10 = getState(input.source(close), input.source(close))
+plot(10, color = getColor(filterState10), linewidth = 3)
+agr.push(filterState10)
 
 agrAvg = agr.avg() 
 
-var tb = table.new(position.top_right, 1, 8)
+var tb = table.new(position.top_right, 1, agr.size() + 1)
 for [index, value] in agr
     if not na(value)
         tb.cell(0, index, str.tostring(value), bgcolor = value > 0 ? color.green : color.red)
 
-tb.cell(0, 7, str.tostring(agrAvg), text_size = size.large)
+tb.cell(0, agr.size(), str.tostring(agrAvg), text_size = size.large)
 
 
 longTreshhold = input.float(0.2, step=0.05)
@@ -85,3 +103,4 @@ if time >= startFrom and barstate.isconfirmed
         strategy.entry("x", strategy.long)
     else if shortCond
         strategy.entry("y", strategy.short)
+
