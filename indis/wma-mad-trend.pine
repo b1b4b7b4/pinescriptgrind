@@ -1,0 +1,210 @@
+// Pine Script®
+// © RakoQuant
+
+//@version=6
+indicator("WMA MAD Trend | RakoQuant", shorttitle="RQ WMA MAD", overlay=true)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MODE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mode = input.string("Daily / Swing", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group="Mode")
+
+// Presets
+preset_baseLen_daily = input.int(32, "Daily BaseLen (WMA)", minval=1, group="Mode Presets")
+preset_madLen_daily  = input.int(26, "Daily MAD Len", minval=1, group="Mode Presets")
+preset_factor_daily  = input.float(2.2, "Daily Factor", minval=0.1, step=0.1, group="Mode Presets")
+
+preset_baseLen_intra = input.int(21, "Intraday BaseLen (WMA)", minval=1, group="Mode Presets")
+preset_madLen_intra  = input.int(21, "Intraday MAD Len", minval=1, group="Mode Presets")
+preset_factor_intra  = input.float(1.8, "Intraday Factor", minval=0.1, step=0.1, group="Mode Presets")
+
+// Custom inputs
+baseLen_custom = input.int(34, "WMA Baseline Length", minval=1, group="Custom")
+madLen_custom  = input.int(34, "MAD Length", minval=1, group="Custom")
+factor_custom  = input.float(2.2, "Factor", minval=0.1, step=0.1, group="Custom")
+
+// Source
+src = input.source(high, "Source", group="Source")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// VISUALS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+paintBars = input.bool(true, "Paint Candles", group="Visuals")
+showFill  = input.bool(true, "Show Trend Fill", group="Visuals")
+fillAlpha = input.int(90, "Fill Transparency", minval=80, maxval=98, group="Visuals")
+
+lineWidth = input.int(2, "Trend Line Width", minval=1, maxval=5, group="Visuals")
+
+// Intensity styling (SAFE: alpha only)
+useDynAlpha = input.bool(true, "Intensity (Alpha)", group="Visuals")
+alphaStrong = input.int(0,  "Alpha @ Strong (0=solid)", minval=0, maxval=90, group="Visuals")
+alphaWeak   = input.int(70, "Alpha @ Weak (higher=faded)", minval=0, maxval=95, group="Visuals")
+
+showBaseline = input.bool(false, "Show Baseline", group="Visuals")
+showRawBands = input.bool(false, "Show Raw Bands", group="Visuals")
+
+// Optional intraday smoothing
+useSmooth = input.bool(true, "Use Signal Smoothing", group="Intraday Filter")
+smoothLen = input.int(3, "Smoothing Length", minval=1, group="Intraday Filter")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MAD ENGINE SETTINGS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+useNormalScale = input.bool(true, "Scale MAD by 1.4826 (≈ stdev)", group="MAD Engine")
+madScaleConst  = input.float(1.35, "MAD Scale Constant", step=0.0001, group="MAD Engine")
+
+// Strength calculation
+//  - "strength" = how far price is from baseline in MAD units, mapped to 0..1
+strengthMapMult = input.float(1.8, "Strength Map Multiplier", minval=0.1, step=0.1, group="MAD Engine")
+
+// Optional confirmation filters
+requireBaselineConfirm = input.bool(false, "Require Baseline Confirmation on Flips", group="Filters")
+useStackFilter         = input.bool(false, "Use MA Stack Filter", group="Filters")
+stackFastLen           = input.int(9,  "Stack Fast EMA", minval=1, group="Filters")
+stackSlowLen           = input.int(21, "Stack Slow EMA", minval=1, group="Filters")
+
+strongThresh = input.float(0.55, "Strong Flip Threshold (0..1)", minval=0.0, maxval=1.0, step=0.05, group="Signals")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RESOLVE ACTIVE SETTINGS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+baseLen = mode == "Custom" ? baseLen_custom : mode == "Intraday" ? preset_baseLen_intra : preset_baseLen_daily
+madLen  = mode == "Custom" ? madLen_custom  : mode == "Intraday" ? preset_madLen_intra  : preset_madLen_daily
+factor0 = mode == "Custom" ? factor_custom  : mode == "Intraday" ? preset_factor_intra  : preset_factor_daily
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BASELINE + MAD (Median Absolute Deviation)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+baseline = ta.wma(src, baseLen)
+
+// MAD around baseline (robust dispersion)
+absDev = math.abs(close - baseline)
+madRaw = ta.median(absDev, madLen)
+mad    = useNormalScale ? madRaw * madScaleConst : madRaw
+
+// Optional intraday smoothing
+baseline_s = (mode == "Intraday" and useSmooth) ? ta.ema(baseline, smoothLen) : baseline
+mad_s      = (mode == "Intraday" and useSmooth) ? ta.ema(mad, smoothLen)      : mad
+
+// Avoid division by zero
+mad_safe = math.max(mad_s, syminfo.mintick)
+
+// Strength 0..1 (distance from baseline in MAD units)
+z = math.abs(close - baseline_s) / mad_safe
+strength = math.min(1.0, z / strengthMapMult)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BANDS + SUPERTREND-LIKE TRAILING LOGIC
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+upperband = baseline_s + factor0 * mad_s
+lowerband = baseline_s - factor0 * mad_s
+
+prevupperband = nz(upperband[1])
+prevlowerband = nz(lowerband[1])
+
+// trailing constraint
+upperband := upperband < prevupperband or close[1] > prevupperband ? upperband : prevupperband
+lowerband := lowerband > prevlowerband or close[1] < prevlowerband ? lowerband : prevlowerband
+
+// Direction and active band line
+int dir = na
+float trend = na
+prevTrend = trend[1]
+
+// Flip candidates (classic ST behavior)
+candBull = close > upperband
+candBear = close < lowerband
+
+// Stack filter
+maF = ta.ema(close, stackFastLen)
+maS = ta.ema(close, stackSlowLen)
+stackBull = maF > maS
+stackBear = maF < maS
+
+// Confirmation rules
+baseBull = close > baseline_s
+baseBear = close < baseline_s
+
+okBull = (not requireBaselineConfirm or baseBull) and (not useStackFilter or stackBull)
+okBear = (not requireBaselineConfirm or baseBear) and (not useStackFilter or stackBear)
+
+if na(mad_s[1]) or na(baseline_s[1])
+    dir := 1
+else if prevTrend == prevupperband
+    dir := (candBull and okBull) ? -1 : 1
+else
+    dir := (candBear and okBear) ? 1 : -1
+
+trend := dir == -1 ? lowerband : upperband
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// COLORS (lime/red + intensity via alpha)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+bullBase = color.rgb(0, 200, 0)
+bearBase = color.rgb(220, 0, 0)
+
+
+
+dynA = useDynAlpha ? int(math.round(alphaWeak + (alphaStrong - alphaWeak) * strength)) : 0
+dynA := math.max(0, math.min(95, dynA))
+
+bullCol = color.new(bullBase, dynA)
+bearCol = color.new(bearBase, dynA)
+
+activeCol = dir < 0 ? bullCol : bearCol
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PLOTTING
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+trendBull = dir < 0 ? trend : na
+trendBear = dir > 0 ? trend : na
+
+bullPlot = plot(trendBull, "Bull Band", color=bullCol, linewidth=lineWidth, style=plot.style_linebr)
+bearPlot = plot(trendBear, "Bear Band", color=bearCol, linewidth=lineWidth, style=plot.style_linebr)
+
+plot(showBaseline ? baseline_s : na, "Baseline (WMA)", color=color.new(color.gray, 55))
+plot(showRawBands ? upperband : na, "Upper Band", color=color.new(color.red, 80))
+plot(showRawBands ? lowerband : na, "Lower Band", color=color.new(color.lime, 80))
+
+midPlot = plot((open + close) / 2, "Mid", color=na)
+
+fill(midPlot, bullPlot, color = showFill ? color.new(bullBase, fillAlpha) : na)
+fill(midPlot, bearPlot, color = showFill ? color.new(bearBase, fillAlpha) : na)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CANDLE PAINT
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+barcolor(paintBars ? activeCol : na)
+
+plotcandle(open, high, low, close,
+     color         = paintBars ? activeCol : na,
+     wickcolor     = paintBars ? activeCol : na,
+     bordercolor   = paintBars ? activeCol : na,
+     force_overlay = true)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIGNALS + ALERTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+bullFlip = dir < 0 and dir[1] > 0
+bearFlip = dir > 0 and dir[1] < 0
+
+bullFlipStrong = bullFlip and strength >= strongThresh
+bearFlipStrong = bearFlip and strength >= strongThresh
+
+// --- ALERTS (candle-close synced) ---
+buyAlert        = barstate.isconfirmed and bullFlip
+sellAlert       = barstate.isconfirmed and bearFlip
+buyStrongAlert  = barstate.isconfirmed and bullFlipStrong
+sellStrongAlert = barstate.isconfirmed and bearFlipStrong
+
+alertcondition(buyAlert,        title="RQ WMA MAD — BUY",          message="RQ WMA MAD BUY on {{exchange}}:{{ticker}} (close={{close}})")
+alertcondition(sellAlert,       title="RQ WMA MAD — SELL",         message="RQ WMA MAD SELL on {{exchange}}:{{ticker}} (close={{close}})")
+alertcondition(buyStrongAlert,  title="RQ WMA MAD — BUY (Strong)", message="RQ WMA MAD BUY STRONG on {{exchange}}:{{ticker}} (close={{close}})")
+alertcondition(sellStrongAlert, title="RQ WMA MAD — SELL (Strong)",message="RQ WMA MAD SELL STRONG on {{exchange}}:{{ticker}} (close={{close}})")
+
+
+// Data window diagnostics
+plot(factor0, "Factor", display=display.data_window)
+plot(mad_s, "MAD (Scaled)", display=display.data_window)
+plot(strength, "Strength (0..1)", display=display.data_window)
+plot(z, "MAD Z-Score", display=display.data_window)

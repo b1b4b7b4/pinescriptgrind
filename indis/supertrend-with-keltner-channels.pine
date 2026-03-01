@@ -1,0 +1,95 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © CharonQuant
+
+//@version=6
+// ______________________
+//  (CharonQuant;:.:. .. )
+//  T""""""""""""""""""""T
+//  |.;....,..........;..|
+//  |;;:: .  .    .      |
+//  l;;;:. :   .     ..  ;
+//  `;;:::.: .    .     .'
+//   l;;:. ..  .     .: ;
+//   `;;::.. .    .  ; .'
+//    l;;:: .  .    /  ;
+//     \;;:. .   .,'  /
+//      `\;:.. ..'  .'
+//        `\;:.. ..'
+//          \;:. /
+//           l; f
+//           `;f'
+//            ||
+//            ;l.
+//           ;: l
+//          / ;  \
+//        ,/  :   `.
+//      ./' . :     `.
+//     /' ,'  :       \
+//    f  /  . :        i
+//   ,' ;  .  :        `.
+//   f ;  .   :      .  i
+//  .'    :   :       . `.
+//  f ,  .    ;       :  i
+//  |    :  ,/`.       : |
+//  |    ;,/;:. `.     . |
+//  |___,/;;:. . .`._____|
+// (!;:.:. .  CharonQuant)
+//  """"""""""""""""""""""`
+indicator("Supertrend with Keltner Channels ~ CharonQuant","SKC ~ CharonQuant",overlay = true)
+
+/// ── Variables ────────────────────────────────────────────────────────────────
+color BULL = #D4A017
+color BEAR = #6B2A3A
+string group_st     = "Supertrend Settings"
+string group_kc     = "Keltner Channel Settings"
+string group_trend  = "Trend Filter Settings"
+string group_visual = "Visual Settings"
+
+// ── Inputs ────────────────────────────────────────────────────────────────
+stFactor = input.float(3.7,"Supertrend Factor",minval = 0.01,step   = 0.01,tooltip = "Multiplier used by the Supertrend calculation.\nHigher values reduce noise but react slower.\nLower values increase sensitivity but may whipsaw.",group = group_st)
+src = input.source(high,"Source",group = group_trend)
+maType = input.string("EMA","Trend Filter MA Type",options = ["SMA", "EMA", "WMA", "HMA", "ALMA", "VWMA"],group = group_trend)
+kcLen = input.int(24,"Keltner EMA Length",minval = 1,tooltip = "Lookback period for the Keltner Channel midline.\nLonger values smooth volatility and reduce false breakouts.",group = group_kc)
+kcMult = input.float( 0.7,"Keltner Multiplier",minval = 0.1,step   = 0.1,tooltip = "Volatility multiplier applied to True Range.\nHigher values require stronger breakouts.",group = group_kc)
+showBars = input.bool(true,"Color Price Bars",tooltip = "Enable or disable trend-based bar coloring.",group = group_visual)
+showLabels = input.bool(true,"Show Buy / Sell Labels",tooltip = "Enable or disable Buy and Sell signal labels.",group = group_visual)
+
+// ── Supertrend ─────────────────────────────────────────────────────────────
+[stLine, stDir] = ta.supertrend(stFactor, 10)
+
+// ── MA Selector Function ───────────────────────────────────────────────────
+ma(_src, _len, _type) =>
+    switch _type
+        "SMA"  => ta.sma(_src, _len)
+        "EMA"  => ta.ema(_src, _len)
+        "WMA"  => ta.wma(_src, _len)
+        "HMA"  => ta.hma(_src, _len)
+        "ALMA" => ta.alma(_src, _len, 0.85, 6)
+        "VWMA" => ta.vwma(_src, _len)
+
+// ── Keltner Channels ───────────────────────────────────────────────────────
+kcMid   = ma(src, kcLen, maType)
+kcRange = ta.tr(true)
+kcUpper = kcMid + (kcMult * kcRange)
+kcLower = kcMid - (kcMult * kcRange)
+
+// ── Signals ───────────────────────────────────────────────────────────
+longSignal  = ta.crossover(close, stLine[1])  and close > kcUpper[1]
+shortSignal = ta.crossunder(close, stLine[1]) and close < kcLower[1]
+
+var CharonQuant = 0
+if longSignal and not shortSignal
+    CharonQuant := 1
+if shortSignal
+    CharonQuant := -1
+
+// ── Plots ─────────────────────────────────────────────────────────────────
+plot(stLine, title="Supertrend", color = CharonQuant == 1  ? BULL : CharonQuant == -1 ? BEAR : color.gray,linewidth = 2)
+plot(kcMid,title="Keltner Midline",color=color.new(color.orange,70),linewidth=2)
+plot(kcUpper,title="Keltner Upper Band",color=color.new(color.gray,55),linewidth=1)
+plot(kcLower,title="Keltner Lower Band",color=color.new(color.gray,55),linewidth=1)
+barcolor(showBars ? CharonQuant==1 ? color.new(BULL,25) : CharonQuant==-1 ? color.new(BEAR,15) : na : na,title="Trend Bar Coloring")
+
+// ── Alerts ────────────────────────────────────────────────────────────────
+alertcondition(longSignal,  title="SKC Long",  message="SKC LONG {{exchange}}:{{ticker}}")
+alertcondition(shortSignal, title="SKC Short", message="SKC SHORT {{exchange}}:{{ticker}}")

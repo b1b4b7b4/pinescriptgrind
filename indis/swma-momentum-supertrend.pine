@@ -7,7 +7,7 @@ indicator("SWMA Momentum SuperTrend | RakoQuant", shorttitle="RQ SWMA MOM ST", o
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MODE
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-mode = input.string("Daily / Swing", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group="Mode")
+mode = input.string("Custom", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group="Mode")
 
 // Presets (tweak later)
 preset_swmaSmooth_daily = input.int(8, "Daily SWMA Smooth", minval=1, group="Mode Presets")
@@ -21,10 +21,10 @@ preset_factor_intra     = input.float(2.2, "Intraday Factor",   minval=0.1, step
 preset_momLen_intra     = input.int(7,  "Intraday Mom Len",     minval=1, group="Mode Presets")
 
 // Custom inputs 
-swmaSmooth_custom = input.int(14, "SWMA Smoothing Length", minval=1, group="Custom")
-atrLen_custom     = input.int(14, "ATR Length",           minval=1, group="Custom")
-factor_custom     = input.float(3.0, "Factor",            minval=0.1, step=0.1, group="Custom")
-momLen_custom     = input.int(10, "Momentum Length",      minval=1, group="Custom")
+swmaSmooth_custom = input.int(10, "SWMA Smoothing Length", minval=1, group="Custom")
+atrLen_custom     = input.int(25, "ATR Length",           minval=1, group="Custom")
+factor_custom     = input.float(0.2, "Factor",            minval=0.1, step=0.1, group="Custom")
+momLen_custom     = input.int(15, "Momentum Length",      minval=1, group="Custom")
 
 // Source
 src = input.source(high, "Source", group="Source")
@@ -39,7 +39,7 @@ useSmooth = input.bool(true, "Use Signal Smoothing", group="Filter")
 smoothLen = input.int(3, "Smoothing Length", minval=1, group="Filter")
 
 // Momentum gating strength (0 = off, 1 = strict)
-momGate = input.float(0.5, "Momentum Gate (0..1)", minval=0, maxval=1, step=0.05, group="Filter")
+momGate = input.float(0.7, "Momentum Gate (0..1)", minval=0, maxval=1, step=0.05, group="Filter")
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // VISUAL OPTIONS 

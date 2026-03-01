@@ -1,9 +1,66 @@
 //@version=6
 indicator("Strategy 1", overlay=true)
 
+
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// KAMA
+// MA (for RSI CD)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_ma(_src, _len, _type) =>
+    switch _type
+        "SMA" => ta.sma(_src, _len)
+        "EMA" => ta.ema(_src, _len)
+        "SMMA" => ta.rma(_src, _len)
+        "WMA" => ta.wma(_src, _len)
+        "VWMA" => ta.vwma(_src, _len)
+        "TEMA" =>
+            ema1 = ta.ema(_src, _len)
+            ema2 = ta.ema(ema1, _len)
+            ema3 = ta.ema(ema2, _len)
+            3 * (ema1 - ema2) + ema3
+        "DEMA" =>
+            ema1 = ta.ema(_src, _len)
+            ema2 = ta.ema(ema1, _len)
+            2 * ema1 - ema2
+        "LSMA" => ta.linreg(_src, _len, 0)
+        "HMA" => ta.wma(2 * ta.wma(_src, _len / 2) - ta.wma(_src, _len), math.floor(math.sqrt(_len)))
+        "ALMA" => ta.alma(_src, _len, 0.85, 6)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// GAUSSIAN FILTER (for RSI CD)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_gaussian_filter(_src, _len, _sigma) =>
+    float gaussian_sum = 0.0
+    float gaussian_weighted_sum = 0.0
+    for i = 0 to _len - 1
+        float weight = math.exp(-0.5 * math.pow((i - (_len - 1) / 2) / _sigma, 2))
+        gaussian_sum := gaussian_sum + weight
+        gaussian_weighted_sum := gaussian_weighted_sum + _src[i] * weight
+    gaussian_weighted_sum / gaussian_sum
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LOGISTIC PROB (for DLO)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_logistic_prob(_series, _mean_lb, _slope, _smooth_len) =>
+    _mean = ta.sma(_series, _mean_lb)
+    _z = (_series - _mean) * _slope
+    _prob_raw = 1.0 / (1.0 + math.exp(-_z))
+    ta.ema(_prob_raw, _smooth_len)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STOCH (for Stochastic For Loop)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_stoch(_len, _kSmooth) =>
+    ta.sma(ta.stoch(close, high, low, _len), _kSmooth)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// HMA (for ForLoop THMA)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_hma(_src, _len) =>
+    wma1 = ta.wma(_src, math.floor(_len / 2))
+    wma_full = ta.wma(_src, _len)
+    wma_diff = 2 * wma1 - wma_full
+    ta.wma(wma_diff, math.floor(math.sqrt(_len)))
+
 f_kama(_src, _len, _fastLen, _slowLen) =>
     int L = math.max(_len, 2)
     int fL = math.max(_fastLen, 2)
@@ -25,12 +82,13 @@ f_kama(_src, _len, _fastLen, _slowLen) =>
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 f_kama_sd_bands() =>
     group_core = "KAMA SD"
-    src = input.source(high, "Source", group=group_core)
-    kamaLen = input.int(9, "KAMA Length", group=group_core)
-    fastLen = input.int(3, "Fast Length", group=group_core)
-    slowLen = input.int(80, "Slow Length", group=group_core)
-    sdLen = input.int(23, "StdDev Length", group=group_core)
-    mult = input.float(2.0, "StdDev Multiplier", group=group_core)
+    src = input.source(hlcc4, "Source", group=group_core)
+    kamaLen = input.int(7, "KAMA Length", minval=2, group=group_core)
+    fastLen = input.int(3, "Fast Length", minval=2, group=group_core)
+    slowLen = input.int(42, "Slow Length", minval=3, group=group_core)
+    sdLen = input.int(23, "StdDev Length (Residual)", minval=2, group=group_core)
+    mult = input.float(2.0, "StdDev Multiplier", minval=0.1, step=0.1, group=group_core)
+    confirmClose = input.bool(true, "Confirm On Candle Close", group=group_core)
 
     kama = f_kama(src, kamaLen, fastLen, slowLen)
     resid = src - kama
@@ -41,10 +99,15 @@ f_kama_sd_bands() =>
     bullSignal = close > upper
     bearSignal = close < lower
 
+    bool bullTrig = bullSignal
+    bool bearTrig = bearSignal
+    bool bullSig = confirmClose ? (barstate.isconfirmed and bullTrig) : bullTrig
+    bool bearSig = confirmClose ? (barstate.isconfirmed and bearTrig) : bearTrig
+
     var int RakoQuant = 0
-    if bullSignal and not bearSignal
+    if bullSig and not bearSig
         RakoQuant := 1
-    if bearSignal
+    if bearSig
         RakoQuant := -1
 
     long = RakoQuant == 1 and RakoQuant[1] != 1
@@ -57,16 +120,16 @@ f_kama_sd_bands() =>
 f_adx_supertrend() =>
     group_core = "ADX SuperTrend"
     src = input.source(high, "Source", group=group_core)
-    baseLen = input.int(12, "Baseline Length (EMA)", group=group_core)
-    atrLen = input.int(43, "ATR Length", group=group_core)
-    adxLen = input.int(16, "ADX Length", group=group_core)
-    multBase = input.float(2.5, "Base Multiplier", group=group_core)
-    adxFloor = input.float(10.0, "ADX Floor", group=group_core)
-    adxCeil = input.float(35.0, "ADX Ceiling", group=group_core)
-    boostMax = input.float(1.50, "Max Boost", group=group_core)
-    boostPow = input.float(0.65, "Boost Power", group=group_core)
-    momLen = input.int(2, "Momentum Lookback", group=group_core)
-    momGate = input.float(0.1, "Momentum Gate", group=group_core)
+    baseLen = input.int(13, "Baseline Length (EMA)", minval=1, group=group_core)
+    atrLen = input.int(37, "ATR Length", minval=1, group=group_core)
+    adxLen = input.int(34, "ADX Length", minval=1, group=group_core)
+    multBase = input.float(2.5, "Base Multiplier", minval=0.1, step=0.1, group=group_core)
+    adxFloor = input.float(10.5, "ADX Floor", minval=0.0, step=0.5, group=group_core)
+    adxCeil = input.float(37.0, "ADX Ceiling", minval=1.0, step=0.5, group=group_core)
+    boostMax = input.float(1.45, "Max Boost (xMult)", minval=1.0, step=0.05, group=group_core)
+    boostPow = input.float(0.55, "Boost Power", minval=0.1, step=0.05, group=group_core)
+    momLen = input.int(2, "Momentum Lookback", minval=1, group=group_core)
+    momGate = input.float(0.08, "Momentum Gate (ATR units)", minval=0.0, step=0.01, group=group_core)
 
     baseline = ta.ema(src, baseLen)
     atr = ta.atr(atrLen)
@@ -114,11 +177,11 @@ f_adx_supertrend() =>
 f_keltner_sd_supertrend() =>
     group_core = "Keltner SD"
     src = input.source(high, "Source", group=group_core)
-    basisLen = input.int(20, "Basis Length (EMA)", group=group_core)
-    sdLen = input.int(21, "StdDev Length", group=group_core)
-    mult = input.float(2.09, "StdDev Multiplier", group=group_core)
-    momLen = input.int(8, "Momentum Lookback", group=group_core)
-    momGate = input.float(0.1, "Momentum Gate", group=group_core)
+    basisLen = input.int(4, "Basis Length (EMA)", minval=1, group=group_core)
+    sdLen = input.int(27, "StdDev Length", minval=1, group=group_core)
+    mult = input.float(1.99, "StdDev Multiplier", minval=0.1, step=0.1, group=group_core)
+    momLen = input.int(3, "Momentum Lookback", minval=1, group=group_core)
+    momGate = input.float(0.05, "Momentum Gate (σ units)", minval=0.0, step=0.01, group=group_core)
 
     basis = ta.ema(src, basisLen)
     sd = ta.stdev(src, sdLen)
@@ -157,12 +220,12 @@ f_keltner_sd_supertrend() =>
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 f_swma_momentum_supertrend() =>
     group_core = "SWMA Momentum"
-    src = input.source(high, "Source", group=group_core)
-    swmaSmooth = input.int(8, "SWMA Smooth", group=group_core)
-    atrLen = input.int(15, "ATR Length", group=group_core)
-    factor = input.float(3.2, "Factor", group=group_core)
-    momLen = input.int(11, "Momentum Length", group=group_core)
-    momGate = input.float(0.5, "Momentum Gate", group=group_core)
+    src = input.source(close, "Source", group=group_core)
+    swmaSmooth = input.int(10, "SWMA Smooth", minval=1, group=group_core)
+    atrLen = input.int(25, "ATR Length", minval=1, group=group_core)
+    factor = input.float(0.2, "Factor", minval=0.1, step=0.1, group=group_core)
+    momLen = input.int(15, "Momentum Length", minval=1, group=group_core)
+    momGate = input.float(0.7, "Momentum Gate (0..1)", minval=0, maxval=1, step=0.05, group=group_core)
 
     swma_raw = ta.swma(src)
     baseline = ta.ema(swma_raw, swmaSmooth)
@@ -202,9 +265,644 @@ f_swma_momentum_supertrend() =>
     [long, short]
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MAD RSI
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_mad_rsi() =>
+    group_core = "MAD RSI"
+    rsi_len = input.int(17, "RSI Length", minval=1, group=group_core)
+    src = input.source(close, "RSI Source", group=group_core)
+    mad_len = input.int(22, "MAD Length", minval=1, group=group_core)
+
+    rsi = ta.rsi(src, rsi_len)
+    float mean_rsi = ta.sma(rsi, mad_len)
+    float abs_dev = math.abs(rsi - mean_rsi)
+    float mad = ta.sma(abs_dev, mad_len)
+
+    float upper = rsi + mad
+    float lower = rsi - mad
+
+    long = lower > 50
+    short = upper < 50
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RSI CONVERGENCE DIVERGENCE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_rsi_convergence_divergence() =>
+    group_core = "RSI CD"
+    rsiLength = input.int(40, "RSI Length", minval=1, group=group_core)
+    maLength = input.int(33, "Moving Average Length", minval=1, group=group_core)
+    maType = input.string("SMMA", "Moving Average Type", options=["SMA", "EMA", "SMMA", "WMA", "VWMA", "TEMA", "DEMA", "LSMA", "HMA", "ALMA"], group=group_core)
+    upperThreshold = input.float(1.69, "Upper Threshold", step=0.01, group=group_core)
+    lowerThreshold = input.float(-0.61, "Lower Threshold", step=0.01, group=group_core)
+    useGaussian = input.bool(false, "Use Gaussian Filter", group=group_core)
+    gaussianLen = input.int(6, "Gaussian Filter Length", minval=1, group=group_core)
+    inputSrc = input.source(close, "Source", group=group_core)
+
+    src = useGaussian ? f_gaussian_filter(math.log(inputSrc), gaussianLen, 2.0) : math.log(inputSrc)
+    rsi = ta.rsi(src, rsiLength)
+    rsiMA = f_ma(rsi, maLength, maType)
+    rsiscore = rsi - rsiMA
+
+    long = rsiscore > upperThreshold
+    short = rsiscore < lowerThreshold
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND VELOCITY CHANNEL
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_trend_velocity_channel() =>
+    group_core = "Trend Velocity"
+    price = input.source(hlcc4, "Price Source", group=group_core)
+    maLen = input.int(14, "MA Length", minval=1, group=group_core)
+    crushSmth = input.int(6, "Crush Smoothing", minval=1, group=group_core)
+    atrLen = input.int(23, "ATR Length", minval=1, group=group_core)
+
+    dema = ta.dema(price, maLen)
+    lagMA = ta.ema(price, math.round(maLen * 1.5))
+    atr = ta.atr(atrLen)
+
+    rawCrush = (dema - lagMA) / atr
+    crush = ta.ema(rawCrush, crushSmth)
+
+    trend = crush > 0 ? 1 : -1
+
+    long = trend == 1 and trend[1] == -1
+    short = trend == -1 and trend[1] == 1
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ROBUST SCALED DEMA
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_robust_scaled_dema() =>
+    group_core = "Robust Scaled Dema"
+    src = input.source(close, "Source", group=group_core)
+    demaLen = input.int(5, "Dema Length", minval=1, group=group_core)
+    rsLen = input.int(63, "Robust Scaling Length", minval=1, group=group_core)
+    upperThreshold = input.float(0.4, "Upper Threshold", step=0.1, group=group_core)
+    lowerThreshold = input.float(0.2, "Lower Threshold", step=0.1, group=group_core)
+
+    dema = ta.dema(src, demaLen)
+
+    q1 = ta.percentile_linear_interpolation(dema, rsLen, 25)
+    q3 = ta.percentile_linear_interpolation(dema, rsLen, 75)
+    demamedian = ta.percentile_linear_interpolation(dema, rsLen, 50)
+
+    iqr = q3 - q1
+    robustscaling = (dema - demamedian) / iqr
+
+    long = robustscaling > upperThreshold
+    short = robustscaling < lowerThreshold
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DECYCLER MOMENTUM REGIME FILTER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_decycler_momentum_regime() =>
+    group_core = "Decycler MRF"
+    highpassLength = input.int(10, "Highpass Period", minval=1, group=group_core)
+    src = input.source(close, "Source", group=group_core)
+    firstLength = input.int(16, "PMO 1st Smoothing Length", minval=1, group=group_core)
+    secondLength = input.int(17, "PMO 2nd Smoothing Length", minval=1, group=group_core)
+    signalLength = input.int(19, "PMO Signal Length", minval=1, group=group_core)
+
+    PI = 2 * math.asin(1)
+    alphaArg = 2 * PI / (highpassLength * math.sqrt(2))
+    alpha = 0.0
+    alpha := math.cos(alphaArg) != 0 ?
+         (math.cos(alphaArg) + math.sin(alphaArg) - 1) / math.cos(alphaArg) :
+         nz(alpha[1])
+    hp = 0.0
+    hp := math.pow(1 - (alpha / 2), 2) * (src - 2 * nz(src[1]) + nz(src[2])) +
+         2 * (1 - alpha) * nz(hp[1]) -
+         math.pow(1 - alpha, 2) * nz(hp[2])
+    decycler = src - hp
+
+    roc1 = ta.roc(src, 1)
+    pmo = ta.ema(10 * ta.ema(nz(roc1), firstLength), secondLength)
+    signal = ta.ema(pmo, signalLength)
+
+    decyclerUp = decycler > decycler[1]
+    decyclerDown = decycler < decycler[1]
+
+    pmoBull = (pmo > signal) and (pmo > 0)
+    pmoBear = (pmo < signal) and (pmo < 0)
+
+    long = decyclerUp and pmoBull
+    short = decyclerDown and pmoBear
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DIRECTIONAL LOGISTIC OSCILLATOR
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_directional_logistic() =>
+    group_core = "DLO"
+    di_len = input.int(11, "DI Length", minval=1, group=group_core)
+    mean_lb = input.int(200, "Mean Lookback", group=group_core)
+    slope = input.float(0.51, "LR Slope", minval=0.01, step=0.02, group=group_core)
+    smooth_len = input.int(12, "Probability Smoothing", minval=1, group=group_core)
+    osc_scale = input.float(3.9, "Oscillator Scale", minval=0.1, step=0.1, group=group_core)
+    osc_smooth_len = input.int(9, "Oscillator Smoothing Length", group=group_core)
+
+    [plus_di, minus_di, adx] = ta.dmi(di_len, di_len)
+
+    prob_plus = f_logistic_prob(plus_di, mean_lb, slope, smooth_len)
+    prob_minus = f_logistic_prob(minus_di, mean_lb, slope, smooth_len)
+    prob_adx = f_logistic_prob(adx, mean_lb, slope, smooth_len)
+
+    net_dir = prob_plus - prob_minus
+    strength_raw = net_dir * prob_adx * osc_scale
+    e2x = math.exp(2 * strength_raw)
+    strength_bound = (e2x - 1) / (e2x + 1)
+    strength = ta.ema(strength_bound, smooth_len)
+
+    long = ta.crossover(strength, 0)
+    short = ta.crossunder(strength, 0)
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EHLERS SUPER SMOOTHER TREND SCORE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_ehlers_ss_trend() =>
+    group_core = "Ehlers SS"
+    src = input.source(close, "Source", group=group_core)
+    ssPeriod = input.int(2, "Super Smoother Period", minval=2, group=group_core)
+    poles = input.int(3, "Poles", options=[2, 3], group=group_core)
+    scoreStart = input.int(1, "Score Lookback Start", group=group_core)
+    scoreEnd = input.int(45, "Score Lookback End", maxval=50, group=group_core)
+    longThres = input.int(40, "Long Threshold", group=group_core)
+    shortThres = input.int(-10, "Short Threshold", group=group_core)
+
+    float c1 = 0
+    float c2 = 0
+    float c3 = 0
+    float c4 = 0
+    float filt = 0
+
+    if poles == 2
+        a = math.exp(-math.sqrt(2) * math.pi / ssPeriod)
+        b = 2.0 * a * math.cos(math.sqrt(2) * math.pi / ssPeriod)
+        c2 := b
+        c3 := -a * a
+        c1 := 1.0 - c2 - c3
+    else
+        a = math.exp(-math.pi / ssPeriod)
+        b = 2.0 * a * math.cos(1.738 * math.pi / ssPeriod)
+        c = a * a
+        c2 := b + c
+        c3 := -(c + b * c)
+        c4 := c * c
+        c1 := 1.0 - c2 - c3 - c4
+
+    avg = (src + nz(src[1], src)) / 2.0
+    filt := poles == 2 ? c1 * avg + c2 * nz(filt[1]) + c3 * nz(filt[2]) : c1 * avg + c2 * nz(filt[1]) + c3 * nz(filt[2]) + c4 * nz(filt[3])
+
+    scoreS = 0.0
+    for i = scoreStart to scoreEnd
+        scoreS += (filt > filt[i] ? 1.0 : -1.0)
+
+    long = scoreS > longThres and nz(scoreS[1]) <= longThres
+    short = scoreS < shortThres and nz(scoreS[1]) >= shortThres
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MEAN DEVIATION TREND
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_mean_deviation_trend() =>
+    group_core = "Mean Deviation"
+    meanLen = input.int(13, "Mean Length", group=group_core)
+    devLen = input.int(16, "Deviation Smoothing", group=group_core)
+    devAccum = input.int(7, "Deviation Accumulation", group=group_core)
+
+    mean = ta.ema(close, meanLen)
+    atr = ta.atr(14)
+
+    rawDev = (close - mean) / atr
+    devSmooth = ta.ema(rawDev, devLen)
+    cumDev = ta.sma(devSmooth, devAccum)
+
+    tDir = cumDev > 0 ? 1 : -1
+    flip = tDir != tDir[1]
+
+    long = flip and tDir == 1
+    short = flip and tDir == -1
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STOCHASTIC FOR LOOP
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_stochastic_for_loop() =>
+    group_core = "Stochastic FL"
+    source = input.source(close, "Source", group=group_core)
+    kSmooth = input.int(1, "%K Smoothing", minval=1, group=group_core)
+    sl = input.int(20, "Loop Start", minval=1, group=group_core)
+    el = input.int(45, "Loop End", maxval=60, group=group_core)
+    thrUp = input.float(20, "Threshold Uptrend", group=group_core)
+    thrDown = input.float(-3, "Threshold Downtrend", group=group_core)
+
+    score = 0.0
+    midpoint = 50.0
+    halfSpan = 30.0
+
+    for i = sl to math.min(el, 60)
+        k = f_stoch(i, kSmooth)
+        zoneScore = halfSpan != 0 ? (k - midpoint) / halfSpan : 0.0
+        zoneScore := math.max(-1.0, math.min(1.0, zoneScore))
+        score += zoneScore
+
+    var int prevTrendState = 0
+    var int currentTrendState = 0
+
+    if score > thrUp
+        currentTrendState := 1
+    else if score < thrDown
+        currentTrendState := -1
+    else
+        currentTrendState := 0
+
+    long = prevTrendState != 1 and currentTrendState == 1
+    short = prevTrendState != -1 and currentTrendState == -1
+
+    if long or short
+        prevTrendState := currentTrendState
+
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ALMA SD BANDS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_alma_sd_bands() =>
+    group_core = "ALMA SD"
+    mode = input.string("Daily / Swing", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group=group_core)
+    len_custom = input.int(57, "Length", minval=5, group=group_core)
+    volSmooth_custom = input.int(24, "Vol Smooth Length", minval=1, group=group_core)
+    src = input.source(high, "Source", group=group_core)
+    almaOffset = input.float(0.87, "ALMA Offset", minval=0.0, maxval=1.0, step=0.01, group=group_core)
+    almaSigma = input.float(0.5, "ALMA Sigma", minval=0.5, step=0.5, group=group_core)
+    mult = input.float(0.9, "Band Multiplier", minval=0.1, step=0.1, group=group_core)
+    useDeadband = input.bool(true, "Deadband Regime", group=group_core)
+    deadMult = input.float(0.2, "Deadband", minval=0.0, step=0.05, group=group_core)
+
+    len = len_custom
+    volSmoothLen = volSmooth_custom
+
+    basis = ta.alma(src, len, almaOffset, almaSigma)
+    ret = math.log(close / nz(close[1]))
+    rawVol = ta.stdev(src, len)
+    vol = ta.alma(rawVol, volSmoothLen, almaOffset, almaSigma)
+
+    upper = basis + mult * vol
+    lower = basis - mult * vol
+
+    var int state = 0
+    dead = useDeadband ? deadMult * vol : 0.0
+
+    if state == 0
+        state := close > basis + dead ? 1 : close < basis - dead ? -1 : 0
+    else if state == 1
+        state := close < basis - dead ? -1 : 1
+    else
+        state := close > basis + dead ? 1 : -1
+
+    long = state == 1 and state[1] != 1
+    short = state == -1 and state[1] != -1
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// FORECAST TREND FILTER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_forecast_trend_filter() =>
+    group_core = "FTF"
+    len = input.int(21, "Forecast Length", minval=21, group=group_core)
+    src = input.source(ohlc4, "Source", group=group_core)
+    maType = input.string("WMA", "Trend Filter MA Type", options=["SMA", "EMA", "WMA", "HMA", "ALMA", "VWMA"], group=group_core)
+    maLen = input.int(75, "Trend Filter MA Length", minval=20, group=group_core)
+    minDev = input.float(0.55, "Min Deviation % Threshold", step=0.01, group=group_core)
+
+    linreg_val = ta.linreg(src, len, 0)
+    fosc = 100 * (src - linreg_val) / src
+    fosc_slope = fosc - fosc[1]
+
+    trendMA = switch maType
+        "SMA" => ta.sma(src, maLen)
+        "EMA" => ta.ema(src, maLen)
+        "WMA" => ta.wma(src, maLen)
+        "VWMA" => ta.vwma(src, maLen)
+        "HMA" => ta.hma(src, maLen)
+        "ALMA" => ta.alma(src, maLen, 0.85, 6)
+
+    inUptrend = src > trendMA
+    inDowntrend = src < trendMA
+
+    longCond = fosc > 0 and fosc_slope > 0 and fosc > minDev and inUptrend
+    shortCond = fosc < 0 and fosc_slope < 0 and fosc < -minDev and inDowntrend
+
+    long = longCond and not shortCond
+    short = shortCond
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// FOR LOOP THMA
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_forloop_thma() =>
+    group_core = "ForLoop THMA"
+    len = input.int(9, "THMA Length", minval=9, group=group_core)
+    src = input.source(hl2, "Source Price", group=group_core)
+    emaLen = input.int(22, "Trend EMA Length", minval=20, maxval=200, group=group_core)
+    diLen = input.int(1, "DI Length", minval=1, group=group_core)
+    adxSmooth = input.int(8, "ADX Smoothing", minval=1, group=group_core)
+    adxThreshold = input.int(27, "ADX Trend Threshold", minval=10, maxval=50, group=group_core)
+    use_weighted = input.bool(false, "Weighted calculation", group=group_core)
+    from = input.int(33, "From number", group=group_core)
+    to_ = input.int(17, "To number", group=group_core)
+    long_level = input.float(4, "Long", group=group_core)
+    short_level = input.float(-17, "Short", group=group_core)
+
+    hma1 = f_hma(src, len)
+    hma2 = f_hma(hma1, len)
+    hma3 = f_hma(hma2, len)
+    thma = 3 * hma1 - 3 * hma2 + hma3
+
+    trendEma = ta.ema(src, emaLen)
+    inUptrend = src > trendEma
+    inDowntrend = src < trendEma
+
+    [diPlus, diMinus, adx] = ta.dmi(diLen, adxSmooth)
+    trending = adx > adxThreshold
+    bullTrend = diPlus > diMinus and trending
+    bearTrend = diMinus > diPlus and trending
+
+    counter = 0.0
+    for i = from to to_
+        counter := thma > thma[i] ? counter + 1 : counter - 1
+
+    var trend = true
+    if counter > long_level
+        trend := true
+    if counter < short_level
+        trend := false
+
+    finalLong = trend and inUptrend and bullTrend
+    finalShort = not trend and inDowntrend and bearTrend
+
+    long = finalLong and not finalShort
+    short = finalShort
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SUPERTREND WITH KELTNER CHANNELS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_supertrend_keltner() =>
+    group_core = "SKC"
+    stFactor = input.float(3.84, "Supertrend Factor", minval=0.01, step=0.01, group=group_core)
+    src = input.source(hlcc4, "Source", group=group_core)
+    maType = input.string("WMA", "Trend Filter MA Type", options=["SMA", "EMA", "WMA", "HMA", "ALMA", "VWMA"], group=group_core)
+    kcLen = input.int(11, "Keltner EMA Length", minval=1, group=group_core)
+    kcMult = input.float(0.8, "Keltner Multiplier", minval=0.1, step=0.1, group=group_core)
+
+    [stLine, stDir] = ta.supertrend(stFactor, 10)
+
+    kcMid = f_ma(src, kcLen, maType)
+    kcRange = ta.tr(true)
+    kcUpper = kcMid + (kcMult * kcRange)
+    kcLower = kcMid - (kcMult * kcRange)
+
+    longSignal = ta.crossover(close, stLine[1]) and close > kcUpper[1]
+    shortSignal = ta.crossunder(close, stLine[1]) and close < kcLower[1]
+
+    long = longSignal and not shortSignal
+    short = shortSignal
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// WMA MAD TREND
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+f_wma_mad_trend() =>
+    group_core = "WMA MAD"
+    mode = input.string("Daily / Swing", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group=group_core)
+    baseLen_custom = input.int(22, "WMA Baseline Length", minval=1, group=group_core)
+    madLen_custom = input.int(20, "MAD Length", minval=1, group=group_core)
+    factor_custom = input.float(2.1, "Factor", minval=0.1, step=0.1, group=group_core)
+    src = input.source(high, "Source", group=group_core)
+    useNormalScale = input.bool(true, "Scale MAD by 1.4826", group=group_core)
+    madScaleConst = input.float(1.3499, "MAD Scale Constant", step=0.0001, group=group_core)
+    strengthMapMult = input.float(2.4, "Strength Map Multiplier", minval=0.1, step=0.1, group=group_core)
+
+    baseLen = baseLen_custom
+    madLen = madLen_custom
+    factor0 = factor_custom
+
+    baseline = ta.wma(src, baseLen)
+    absDev = math.abs(close - baseline)
+    madRaw = ta.median(absDev, madLen)
+    mad = useNormalScale ? madRaw * madScaleConst : madRaw
+
+    mad_safe = math.max(mad, syminfo.mintick)
+    z = math.abs(close - baseline) / mad_safe
+    strength = math.min(1.0, z / strengthMapMult)
+
+    upperband = baseline + factor0 * mad
+    lowerband = baseline - factor0 * mad
+
+    prevupperband = nz(upperband[1])
+    prevlowerband = nz(lowerband[1])
+
+    upperband := upperband < prevupperband or close[1] > prevupperband ? upperband : prevupperband
+    lowerband := lowerband > prevlowerband or close[1] < prevlowerband ? lowerband : prevlowerband
+
+    int dir = na
+    float trend = na
+    prevTrend = nz(trend[1])
+
+    candBull = close > upperband
+    candBear = close < lowerband
+
+    if na(mad[1]) or na(baseline[1])
+        dir := 1
+    else if prevTrend == prevupperband
+        dir := candBull ? -1 : 1
+    else
+        dir := candBear ? 1 : -1
+
+    trend := dir == -1 ? lowerband : upperband
+
+    long = dir < 0 and dir[1] > 0
+    short = dir > 0 and dir[1] < 0
+    [long, short]
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CALL INDICATORS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [kamaLong, kamaShort] = f_kama_sd_bands()
 [adxLong, adxShort] = f_adx_supertrend()
 [keltnerLong, keltnerShort] = f_keltner_sd_supertrend()
 [swmaLong, swmaShort] = f_swma_momentum_supertrend()
+[madRsiLong, madRsiShort] = f_mad_rsi()
+[rsiCdLong, rsiCdShort] = f_rsi_convergence_divergence()
+[tvcLong, tvcShort] = f_trend_velocity_channel()
+[robustDemaLong, robustDemaShort] = f_robust_scaled_dema()
+[dmrfLong, dmrfShort] = f_decycler_momentum_regime()
+[dloLong, dloShort] = f_directional_logistic()
+[ehlersLong, ehlersShort] = f_ehlers_ss_trend()
+[mdtLong, mdtShort] = f_mean_deviation_trend()
+[sflLong, sflShort] = f_stochastic_for_loop()
+[almaLong, almaShort] = f_alma_sd_bands()
+[ftfLong, ftfShort] = f_forecast_trend_filter()
+[flThmaLong, flThmaShort] = f_forloop_thma()
+[skcLong, skcShort] = f_supertrend_keltner()
+[wmaMadLong, wmaMadShort] = f_wma_mad_trend()
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PLOT SIGNALS (1 = long, 0 = short)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+dirArray = array.new<float>()
+
+var int kamaDir = 0
+if kamaLong
+    kamaDir := 1
+if kamaShort
+    kamaDir := -1
+plot(kamaDir, "KAMA Dir", color=color.yellow)
+array.push(dirArray, kamaDir)
+
+var int adxDir = 0
+if adxLong
+    adxDir := 1
+if adxShort
+    adxDir := -1
+plot(adxDir, "ADX Dir", color=color.purple)
+array.push(dirArray, adxDir)
+
+var int keltnerDir = 0
+if keltnerLong
+    keltnerDir := 1
+if keltnerShort
+    keltnerDir := -1
+plot(keltnerDir, "Keltner Dir", color=color.orange)
+array.push(dirArray, keltnerDir)
+
+var int swmaDir = 0
+if swmaLong
+    swmaDir := 1
+if swmaShort
+    swmaDir := -1
+plot(swmaDir, "SWMA Dir", color=color.teal)
+array.push(dirArray, swmaDir)
+
+var int madRsiDir = 0
+if madRsiLong
+    madRsiDir := 1
+if madRsiShort
+    madRsiDir := -1
+plot(madRsiDir, "MAD RSI Dir", color=color.maroon)
+array.push(dirArray, madRsiDir)
+
+var int rsiCdDir = 0
+if rsiCdLong
+    rsiCdDir := 1
+if rsiCdShort
+    rsiCdDir := -1
+plot(rsiCdDir, "RSI CD Dir", color=color.lime)
+array.push(dirArray, rsiCdDir)
+
+var int tvcDir = 0
+if tvcLong
+    tvcDir := 1
+if tvcShort
+    tvcDir := -1
+plot(tvcDir, "TVC Dir", color=color.red)
+array.push(dirArray, tvcDir)
+
+var int robustDemaDir = 0
+if robustDemaLong
+    robustDemaDir := 1
+if robustDemaShort
+    robustDemaDir := -1
+plot(robustDemaDir, "Robust Dema Dir", color=color.fuchsia)
+array.push(dirArray, robustDemaDir)
+
+var int dmrfDir = 0
+if dmrfLong
+    dmrfDir := 1
+if dmrfShort
+    dmrfDir := -1
+plot(dmrfDir, "DMRF Dir", color=color.aqua)
+array.push(dirArray, dmrfDir)
+
+var int dloDir = 0
+if dloLong
+    dloDir := 1
+if dloShort
+    dloDir := -1
+plot(dloDir, "DLO Dir", color=color.blue)
+array.push(dirArray, dloDir)
+
+var int ehlersDir = 0
+if ehlersLong
+    ehlersDir := 1
+if ehlersShort
+    ehlersDir := -1
+plot(ehlersDir, "Ehlers Dir", color=color.orange)
+array.push(dirArray, ehlersDir)
+
+var int mdtDir = 0
+if mdtLong
+    mdtDir := 1
+if mdtShort
+    mdtDir := -1
+plot(mdtDir, "MDT Dir", color=color.olive)
+array.push(dirArray, mdtDir)
+
+var int sflDir = 0
+if sflLong
+    sflDir := 1
+if sflShort
+    sflDir := -1
+plot(sflDir, "SFL Dir", color=color.lime)
+array.push(dirArray, sflDir)
+
+var int almaDir = 0
+if almaLong
+    almaDir := 1
+if almaShort
+    almaDir := -1
+plot(almaDir, "ALMA Dir", color=color.silver)
+array.push(dirArray, almaDir)
+
+var int ftfDir = 0
+if ftfLong
+    ftfDir := 1
+if ftfShort
+    ftfDir := -1
+plot(ftfDir, "FTF Dir", color=color.green)
+array.push(dirArray, ftfDir)
+
+var int flThmaDir = 0
+if flThmaLong
+    flThmaDir := 1
+if flThmaShort
+    flThmaDir := -1
+plot(flThmaDir, "FL THMA Dir", color=color.gray)
+array.push(dirArray, flThmaDir)
+
+var int skcDir = 0
+if skcLong
+    skcDir := 1
+if skcShort
+    skcDir := -1
+plot(skcDir, "SKC Dir", color=color.navy)
+array.push(dirArray, skcDir)
+
+var int wmaMadDir = 0
+if wmaMadLong
+    wmaMadDir := 1
+if wmaMadShort
+    wmaMadDir := -1
+plot(wmaMadDir, "WMA MAD Dir", color=color.olive)
+array.push(dirArray, wmaMadDir)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ENSEMBLE AVERAGE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+avgDir = array.avg(dirArray)
+plot(avgDir, "Avg Dir", color=color.white, linewidth=3)

@@ -13,12 +13,12 @@ group_sd   = "SD Bands"
 group_sig  = "Signals"
 group_viz  = "Visuals"
 
-src = input.source(high, "Source", group=group_core)
+src = input.source(hlcc4, "Source", group=group_core)
 
 // KAMA params
-kamaLen  = input.int(9, "KAMA Length", minval=2, group=group_kama)
-fastLen  = input.int(3,  "Fast Length", minval=2, group=group_kama)   
-slowLen  = input.int(80, "Slow Length", minval=3, group=group_kama)    
+kamaLen  = input.int(7, "KAMA Length", minval=2, group=group_kama)
+fastLen  = input.int(3,  "Fast Length", minval=2, group=group_kama)
+slowLen  = input.int(42, "Slow Length", minval=3, group=group_kama)    
 
 // SD bands
 sdLen    = input.int(23, "StdDev Length (Residual)", minval=2, group=group_sd)

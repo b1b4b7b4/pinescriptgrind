@@ -12,20 +12,20 @@ group_mech = "Mechanism"
 group_viz  = "Visuals"
 
 src      = input.source(high, "Source", group=group_core)
-baseLen  = input.int(12, "Baseline Length (EMA)", minval=1, group=group_core)
-atrLen   = input.int(43, "ATR Length", minval=1, group=group_core)
+baseLen  = input.int(13, "Baseline Length (EMA)", minval=1, group=group_core)
+atrLen   = input.int(37, "ATR Length", minval=1, group=group_core)
 
 // ADX adaptivity
-adxLen    = input.int(16, "ADX Length", minval=1, group=group_mech)
+adxLen    = input.int(34, "ADX Length", minval=1, group=group_mech)
 multBase  = input.float(2.5, "Base Multiplier", minval=0.1, step=0.1, group=group_mech)
-adxFloor  = input.float(10.0, "ADX Floor", minval=0.0, step=0.5, group=group_mech)
-adxCeil   = input.float(35.0, "ADX Ceiling", minval=1.0, step=0.5, group=group_mech)
-boostMax  = input.float(1.50, "Max Boost (xMult)", minval=1.0, step=0.05, group=group_mech)
-boostPow  = input.float(0.65, "Boost Power", minval=0.1, step=0.05, group=group_mech)
+adxFloor  = input.float(10.5, "ADX Floor", minval=0.0, step=0.5, group=group_mech)
+adxCeil   = input.float(37.0, "ADX Ceiling", minval=1.0, step=0.5, group=group_mech)
+boostMax  = input.float(1.45, "Max Boost (xMult)", minval=1.0, step=0.05, group=group_mech)
+boostPow  = input.float(0.55, "Boost Power", minval=0.1, step=0.05, group=group_mech)
 
 // Optional momentum gate (baseline slope normalized by ATR)
 momLen   = input.int(2, "Momentum Lookback", minval=1, group=group_mech)
-momGate  = input.float(0.1, "Momentum Gate (ATR units)", minval=0.0, step=0.01, group=group_mech)
+momGate  = input.float(0.08, "Momentum Gate (ATR units)", minval=0.0, step=0.01, group=group_mech)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // VISUAL OPTIONS (open-source friendly)

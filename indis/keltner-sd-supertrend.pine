@@ -12,12 +12,12 @@ group_mech = "Mechanism"
 group_viz  = "Visuals"
 
 src        = input.source(high, "Source", group=group_core)
-basisLen   = input.int(20, "Basis Length (EMA)", minval=1, group=group_core)
-sdLen      = input.int(21, "StdDev Length", minval=1, group=group_core)
-mult       = input.float(2.09, "StdDev Multiplier", minval=0.1, step=0.1, group=group_core)
+basisLen   = input.int(4, "Basis Length (EMA)", minval=1, group=group_core)
+sdLen      = input.int(27, "StdDev Length", minval=1, group=group_core)
+mult       = input.float(1.99, "StdDev Multiplier", minval=0.1, step=0.1, group=group_core)
 
-momLen     = input.int(8, "Momentum Lookback", minval=1, group=group_mech)
-momGate    = input.float(0.1, "Momentum Gate (σ units)", minval=0.0, step=0.01, group=group_mech)
+momLen     = input.int(3, "Momentum Lookback", minval=1, group=group_mech)
+momGate    = input.float(0.05, "Momentum Gate (σ units)", minval=0.0, step=0.01, group=group_mech)
 
 paintBars  = input.bool(true, "Paint Candles", group=group_viz)
 showFill   = input.bool(true, "Show Trend Fill", group=group_viz)

@@ -1,0 +1,118 @@
+// Pine Script®
+// © RakoQuant
+
+//@version=6
+indicator("ALMA SD Bands | RakoQuant", shorttitle="RQ ALMA SD BANDS", overlay=true)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MODE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mode = input.string("Daily / Swing", "Mode", options=["Daily / Swing", "Intraday", "Custom"], group="Mode")
+
+// Presets (these are intentionally smoother)
+preset_len_daily   = input.int(111, "Daily Length", minval=5, group="Mode Presets")
+preset_len_intra   = input.int(21, "Intraday Length", minval=5, group="Mode Presets")
+
+preset_volS_daily  = input.int(75, "Daily Vol Smooth", minval=1, group="Mode Presets")
+preset_volS_intra  = input.int(10, "Intraday Vol Smooth", minval=1, group="Mode Presets")
+
+// Custom
+len_custom    = input.int(34, "Length", minval=5, group="Custom")
+volSmooth_custom = input.int(14, "Vol Smooth Length", minval=1, group="Custom")
+
+len = mode == "Custom" ? len_custom : mode == "Intraday" ? preset_len_intra : preset_len_daily
+volSmoothLen = mode == "Custom" ? volSmooth_custom : mode == "Intraday" ? preset_volS_intra : preset_volS_daily
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INPUTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+src = input.source(high, "Source", group="Source")
+
+// ALMA params (stable defaults)
+almaOffset = input.float(0.85, "ALMA Offset (0..1)", minval=0.0, maxval=1.0, step=0.01, group="ALMA")
+almaSigma  = input.float(6.0,  "ALMA Sigma", minval=0.5, step=0.5, group="ALMA")
+
+// Bands
+mult = input.float(0.4, "Band Multiplier (σ)", minval=0.1, step=0.1, group="Bands")
+
+// Noise control
+volType = input.string("Price StdDev", "Volatility Type", options=["Price StdDev", "Return StdDev"], group="Bands")
+useDeadband = input.bool(true, "Deadband Regime (less flicker)", group="Bands")
+deadMult = input.float(0.35, "Deadband (in σ)", minval=0.0, step=0.05, group="Bands")
+
+// Visuals
+showFill  = input.bool(true, "Show Fill", group="Visuals")
+paintBars = input.bool(false, "Paint Candles", group="Visuals")
+lineWidth = input.int(4, "Band Width", minval=1, maxval=4, group="Visuals")
+
+bullCol = color.lime
+bearCol = color.red
+midCol  = color.new(color.white, 0)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1) Smooth baseline
+basis = ta.alma(src, len, almaOffset, almaSigma)
+
+// 2) Volatility
+ret = math.log(close / nz(close[1]))
+rawVol = volType == "Return StdDev" ? ta.stdev(ret, len) : ta.stdev(src, len)
+
+// 3) Smooth the volatility with ALMA 
+vol = ta.alma(rawVol, volSmoothLen, almaOffset, almaSigma)
+
+// 4) Bands
+upper = basis + mult * vol
+lower = basis - mult * vol
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CLEAN REGIME 
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var int state = 0  // 1 bull, -1 bear
+
+dead = useDeadband ? deadMult * vol : 0.0
+
+if state == 0
+    state := close > basis + dead ? 1 : close < basis - dead ? -1 : 0
+else if state == 1
+    state := close < basis - dead ? -1 : 1
+else
+    state := close > basis + dead ? 1 : -1
+
+bull = state == 1
+bear = state == -1
+
+col = bull ? bullCol : bear ? bearCol : color.new(color.gray, 40)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PLOTTING (minimal)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+pU = plot(upper, "Upper Band", color=color.new(col, 0), linewidth=lineWidth, style=plot.style_line)
+pL = plot(lower, "Lower Band", color=color.new(col, 0), linewidth=lineWidth, style=plot.style_line)
+pB = plot(basis, "ALMA Basis", color=midCol, linewidth=1)
+
+fill(pU, pL, color = showFill ? color.new(col, 92) : na)
+
+// Candle paint (optional)
+barcolor(paintBars ? col : na)
+plotcandle(open, high, low, close,
+     color         = paintBars ? col : na,
+     wickcolor     = paintBars ? col : na,
+     bordercolor   = paintBars ? col : na,
+     force_overlay = true)
+
+// Data window diagnostics (optional)
+plot(vol, "Smoothed Vol (σ)", display=display.data_window)
+
+// Alerts
+bullFlip = bull and not bull[1]
+bearFlip = bear and not bear[1]
+
+//ALERTS
+
+buyAlert  = barstate.isconfirmed and bullFlip
+sellAlert = barstate.isconfirmed and bearFlip
+
+alertcondition(buyAlert,  title="RQ ALMA SD BANDS — BULL", message="RQ ALMA SD BANDS BULL regime on {{exchange}}:{{ticker}} (close={{close}})")
+alertcondition(sellAlert, title="RQ ALMA SD BANDS — BEAR", message="RQ ALMA SD BANDS BEAR regime on {{exchange}}:{{ticker}} (close={{close}})")
